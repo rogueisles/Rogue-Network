@@ -26,7 +26,7 @@ const (
 	RogueInitialAllocationHeight uint64 = 1100110
 	RogueMonthlyInterval         uint64 = 219150
 	RogueMonthlyReleaseCount     uint64 = 36
-	RogueRewardSchedule                 = "rgn-mainnet-v2"
+	RogueRewardSchedule                 = "rgn-mainnet-v3"
 	RogueTailStartOffset         uint64 = 12480667
 	RogueTailStartHeight         uint64 = uint64(RogueActivationHeight) + RogueTailStartOffset
 	RoguePreForgeGrossIssuedWei         = "1443341200708488883357593982"
