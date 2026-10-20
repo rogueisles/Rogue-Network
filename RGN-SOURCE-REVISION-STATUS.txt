@@ -1,2 +1,0 @@
-FULL CORRECTED SOURCE SNAPSHOT. LOCAL REVIEW/BUILD ONLY. LIVE UPGRADE NOT READY.
-Profile rgn-mainnet-v3; proof V4; production signer configuration absent.
