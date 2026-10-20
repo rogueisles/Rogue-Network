@@ -1,11 +1,2 @@
-CURRENT SOURCE: APPROVED OPTION B WITH CAPPED 100 RGN TAIL
-The current archives end in -b100-candidate; older archives are superseded.
-rewardSchedule rgn-mainnet-v2, activation 1100100, lifetime gross cap 10.7B.
-The user approved option B decay and a 100 RGN tail ending at the exact cap.
-No publication, Docker build, server upgrade or production config installation
-was performed. Manual GitHub source upload for user review is authorized.
-The four earlier reviewed correctness corrections remain included. The later
-separate correctness review checked v2 arithmetic/boundaries and those retained
-paths; broader security review is still incomplete. Current tests/build hashes
-and exact issuance certificates are in the accompanying qualification evidence.
-Production activation remains subject to the listed configuration/review gates.
+FULL CORRECTED SOURCE SNAPSHOT. LOCAL REVIEW/BUILD ONLY. LIVE UPGRADE NOT READY.
+Profile rgn-mainnet-v3; proof V4; production signer configuration absent.
