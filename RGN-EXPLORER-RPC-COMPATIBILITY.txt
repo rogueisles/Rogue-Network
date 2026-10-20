@@ -1,0 +1,52 @@
+EXPLORER REWARD RPC COMPATIBILITY
+
+The custom JSON-RPC method eth_getBlockReward is retained in the corrected
+working node source. Its registered implementation is PublicMinerAPI.GetBlockReward
+in eth/api.go. Reward calculations use the shared consensus reward functions.
+Do not register a second competing implementation with a separate old formula.
+
+The caller supplies a block number as an RPC hex quantity, or an existing block
+tag. For example, 1,100,100 is 0x10c944. The implementation resolves the requested
+block and selects its historical or activated reward rules and destinations.
+
+Existing fields remain available:
+blockNumber, totalReward, minerReward, minerAddress, stakingReward,
+stakingAddress, tribeReward, tribeAddress, maintenanceReward, maintenanceAddress.
+
+The extended response also includes total, miner, staking, tribe, maintenance,
+p2e, treasury, p2eReward, p2eAddress, treasuryReward, treasuryAddress,
+specialIssuance, specialIssuanceAddress when applicable, currencySymbol,
+blockHash and pending. Integer RPC amounts are hex wei, with 18 decimals.
+
+Normal subsidy is separate from special issuance and transaction fees. A
+treasury allocation must not be counted twice by adding it to a normal subsidy
+field that already includes it. The normal subsidy fields here exclude it.
+Genesis height zero retains a nominal schedule quote for API compatibility;
+that quote does not represent actual genesis allocations or gross supply.
+Unknown blocks return null. Pending work has a null blockHash.
+
+Historical blocks retain their original reward rules and height-selected
+destinations. Activated normal rewards use 40% miner, 30% staking, 20% P2E and
+10% treasury, with rounding dust assigned by the consensus implementation.
+Special historical and activated issuances have their own reported destination.
+
+SERVER SOURCE CHECK
+The operator's read-only report from 144.91.124.126 found sources under
+/root/cavescan-backend. All seven selected file hashes match the saved local
+backend reference. Those selected files do not reference eth_getBlockReward.
+Their reward display, indexed reward, supply and staking APR currently derive
+from the backend's local emission module. The server report did not identify a
+matching running process, so the active web route has not yet been confirmed.
+
+EXPLORER UPDATE STILL REQUIRED
+Confirm the serving process/proxy and make the reward adapter consume the RPC
+amounts and recipients. Preserve existing REST field names, use exact wei for
+stored values, select display labels by the returned data and block height,
+and bind any reward cache to both block height and canonical hash. A reorg must
+invalidate an old height-only entry. The current frontend's fixed 45/40/7/8
+labels must not be used for activated blocks. Supply/indexing/APR integration
+requires separate verification; a block-reward endpoint alone does not provide
+cumulative supply. Keep the existing database, indexed history and contract data.
+
+No explorer process, database, server configuration or GitHub content was
+changed by this inspection. The frozen published source ZIP has not been replaced.

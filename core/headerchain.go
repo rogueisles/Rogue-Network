@@ -27,6 +27,7 @@ import (
 
 	"github.com/TeamEGEM/go-egem/common"
 	"github.com/TeamEGEM/go-egem/consensus"
+	"github.com/TeamEGEM/go-egem/consensus/forge"
 	"github.com/TeamEGEM/go-egem/core/types"
 	"github.com/TeamEGEM/go-egem/ethdb"
 	"github.com/TeamEGEM/go-egem/log"
@@ -141,7 +142,11 @@ func (hc *HeaderChain) WriteHeader(header *types.Header) (status WriteStatus, er
 		return NonStatTy, consensus.ErrUnknownAncestor
 	}
 	localTd := hc.GetTd(hc.currentHeaderHash, hc.CurrentHeader().Number.Uint64())
-	externTd := new(big.Int).Add(header.Difficulty, ptd)
+	work, err := forge.HeaderWork(hc.config, header)
+	if err != nil {
+		return NonStatTy, err
+	}
+	externTd := new(big.Int).Add(work, ptd)
 
 	// Irrelevant of the canonical status, write the td and header to the database
 	if err := hc.WriteTd(hash, number, externTd); err != nil {

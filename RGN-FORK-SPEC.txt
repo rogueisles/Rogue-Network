@@ -1,13 +1,13 @@
-ROGUE NETWORK / RGN -- SOURCE SPECIFICATION, ECONOMIC PROFILE V2
+ROGUE NETWORK / RGN -- SOURCE SPECIFICATION, PROFILE V3 / PROOF V4
 
 IDENTITY AND ACTIVATION
 Chain/network ID 70088; native currency RGN, 18 decimals. Existing OGG units
 are preserved one for one. Genesis remains
 dc4d38c0ef41d3fdf50642fdf5fc99e221eadd09e73bbe616724f55a136270ab.
-The explicit rewardSchedule is rgn-mainnet-v2, ForgeBlock 1100100 inclusive.
+The explicit rewardSchedule is rgn-mainnet-v3, ForgeBlock 1100100 inclusive.
 Before that height, historical ProgPoW, reward, EVM and account rules apply.
 Afterward, the reviewed Scrypt proof rules and the economic schedule below apply.
-The superseded rgn-mainnet-v1 economic profile is rejected. No four-node live
+The superseded rgn-mainnet-v1 and rgn-mainnet-v2 profiles are rejected. No four-node live
 configuration has been changed; an empty schedule retains the existing legacy
 profile. The original genesis.json, wire domains and accounting keys are retained.
 
@@ -71,11 +71,31 @@ flag. Ordinary state-root validation, rollback and replay govern each credit.
 
 PROOF AND CONFIGURATION RULES
 Canonical Scrypt only after activation; private CPU target scaling is rejected.
-V3 multi proofs must include DGB, DOGE or both. Litecoin/other anchors are not
+V4 multi proofs must include DGB, DOGE or both. Litecoin/other anchors are not
 enabled in this release. Missing/old proofs, zero/disabled participation, altered
 bindings, insufficient or duplicate quorum signatures and invalid work reject.
 The template signatures attest native proposal bindings; they do not replace
 proof-of-work validation or prove native liveness independently at every peer.
+The exact authorized template, work hash and ordered quorum signatures are
+committed in a zero-value RGNCERT4 OP_RETURN parent coinbase output before mining.
+The signed body commitment normalizes only the bounded extranonce and this
+certificate payload. A different certificate requires different mined parent work.
+V4 requires exactly the configured quorum of distinct authorized signatures in
+address order, with at most 16 configured signers. Older V3 behavior remains
+available to other explicitly configured profiles; it cannot activate this one.
+
+Historical total-work increments remain raw historical difficulty. From the
+activation height, target = floor(ScryptDifficultyOneTarget / difficulty) and
+the increment is floor(2^256 / (target + 1)). Full/header/receipt imports,
+unavailable-state recovery and peer propagation use this same increment.
+This is target-derived fork-choice arithmetic, not an economic equivalence claim
+between mining algorithms. Ethereum header hashing and proof wire domains retain
+their specified identities. Existing post-activation experimental databases using
+old cumulative-work rules must not be reused as a production migration target.
+
+Activated block bodies are checked before both known-block and unavailable-parent
+state shortcuts. A known header cannot authenticate a substituted body after
+rollback. Historical validation ordering is retained before activation.
 RetargetV2 remains unchanged, with configured target 12 seconds. The user accepts
 the recorded timing; no new timing tuning or exact 12-second claim is made.
 Production public signer identities, independently validating services, quorum
@@ -93,7 +113,10 @@ this release. It does not enable Litecoin. RGN treasury credits are separate
 native assets and use the RGN treasury address above.
 
 RPC AND POOL
-Existing eth_getBlockReward and minerReward fields remain. Total is normal
+Existing eth_getBlockReward and minerReward fields remain. Legacy reward-suffixed
+fields and recipient addresses remain available; internal/ethapi/ogg_api.go holds
+the response definition, and eth/api.go supplies the registered height-selected
+method. There is no second independent reward formula. Total is normal
 subsidy only; specialIssuance is additional treasury issuance. New fields include
 p2e, treasury and currencySymbol. Tribe/Maintenance are zero under the new split.
 The pool consumes canonical miner subsidy plus its existing transaction fee
@@ -104,12 +127,19 @@ externalChainPolicy="dgb-doge". Internal OGG Redis/round identifiers remain.
 
 QUALIFICATION SCOPE
 Use the accompanying qualification report for exact source hashes and test scope.
-The previous v1 real-miner H..H+11 sample is retained as evidence of the unchanged
-proof path, not as verification of v2 rewards after H. Its first H block has the
-same 1100 reward and can be revalidated byte for byte under v2. Current v2 state
-tests cover activation, all special credits, tail onset, cap exhaustion, reorgs
-and restarts. The full historical replay covers unchanged historical validation;
-it is not unknown future history or a new full v2 miner-backed sample.
-Source may be uploaded by the user for review. Deployment still needs frozen
-production settings, broader consensus/security review and a fresh height/config
-preflight. No Docker build, source publication or live upgrade is performed here.
+The previous real-miner H..H+11 sample used V3 proofs and an earlier economic
+profile. It does not qualify V4 activation. Current tests cover canonical-target
+V4 encoding/binding and rejection fixtures, mock native proposal validation,
+compiled Stratum shares and crash recovery, persisted rewards, special credits,
+tail onset, cap exhaustion, reorgs, unavailable-state recovery and peer messages.
+State-boundary fixtures use trusted checkpoints and explicitly skip block seals;
+they do not claim successful canonical-target V4 block mining/import.
+The historical replay through 1066800 covers preserved historical validation,
+not unknown future history. The approved B100 economic functions are unchanged.
+
+This source snapshot may be reviewed and built offline. Live deployment remains
+on hold for a successful real-miner V4 activation/native-proposal rehearsal,
+permanent signer services/settings, fresh backups and four-node height/config
+agreement. A separate automated review is not an external security audit.
+The preserved genesis does not schedule the fork by itself. No production signer
+configuration, Docker image, source publication or live upgrade is supplied here.

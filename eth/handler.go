@@ -28,6 +28,7 @@ import (
 
 	"github.com/TeamEGEM/go-egem/common"
 	"github.com/TeamEGEM/go-egem/consensus"
+	"github.com/TeamEGEM/go-egem/consensus/forge"
 	"github.com/TeamEGEM/go-egem/consensus/misc"
 	"github.com/TeamEGEM/go-egem/core"
 	"github.com/TeamEGEM/go-egem/core/types"
@@ -628,6 +629,20 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 		if err := msg.Decode(&request); err != nil {
 			return errResp(ErrDecode, "%v: %v", msg, err)
 		}
+		if request.Block == nil || request.TD == nil {
+			return errResp(ErrDecode, "missing propagated block or total work")
+		}
+		work, workErr := forge.HeaderWork(pm.chainconfig, request.Block.Header())
+		if workErr != nil || request.TD.Cmp(work) < 0 {
+			return errResp(ErrDecode, "invalid propagated block work")
+		}
+		trueTD := new(big.Int).Sub(request.TD, work)
+		if request.Block.NumberU64() > 0 {
+			knownParentTD := pm.blockchain.GetTd(request.Block.ParentHash(), request.Block.NumberU64()-1)
+			if knownParentTD != nil && knownParentTD.Cmp(trueTD) != 0 {
+				return errResp(ErrDecode, "propagated parent total work mismatch")
+			}
+		}
 		request.Block.ReceivedAt = msg.ReceivedAt
 		request.Block.ReceivedFrom = p
 
@@ -637,10 +652,7 @@ func (pm *ProtocolManager) handleMsg(p *peer) error {
 
 		// Assuming the block is importable by the peer, but possibly not yet done so,
 		// calculate the head hash and TD that the peer truly must have.
-		var (
-			trueHead = request.Block.ParentHash()
-			trueTD   = new(big.Int).Sub(request.TD, request.Block.Difficulty())
-		)
+		trueHead := request.Block.ParentHash()
 		// Update the peers total difficulty if better than the previous
 		if _, td := p.Head(); trueTD.Cmp(td) > 0 {
 			p.SetHead(trueHead, trueTD)
@@ -690,7 +702,13 @@ func (pm *ProtocolManager) BroadcastBlock(block *types.Block, propagate bool) {
 		// Calculate the TD of the block (it's not imported yet, so block.Td is not valid)
 		var td *big.Int
 		if parent := pm.blockchain.GetBlock(block.ParentHash(), block.NumberU64()-1); parent != nil {
-			td = new(big.Int).Add(block.Difficulty(), pm.blockchain.GetTd(block.ParentHash(), block.NumberU64()-1))
+			work, err := forge.HeaderWork(pm.chainconfig, block.Header())
+			parentTD := pm.blockchain.GetTd(block.ParentHash(), block.NumberU64()-1)
+			if err != nil || parentTD == nil {
+				log.Error("Cannot propagate block with invalid total work", "number", block.Number(), "hash", hash)
+				return
+			}
+			td = new(big.Int).Add(work, parentTD)
 		} else {
 			log.Error("Propagating dangling block", "number", block.Number(), "hash", hash)
 			return

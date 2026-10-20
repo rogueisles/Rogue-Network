@@ -30,6 +30,7 @@ import (
 	"github.com/TeamEGEM/go-egem/common"
 	"github.com/TeamEGEM/go-egem/common/mclock"
 	"github.com/TeamEGEM/go-egem/consensus"
+	"github.com/TeamEGEM/go-egem/consensus/forge"
 	"github.com/TeamEGEM/go-egem/core/state"
 	"github.com/TeamEGEM/go-egem/core/types"
 	"github.com/TeamEGEM/go-egem/core/vm"
@@ -886,7 +887,11 @@ func (bc *BlockChain) WriteBlockWithState(block *types.Block, receipts []*types.
 
 	currentBlock := bc.CurrentBlock()
 	localTd := bc.GetTd(currentBlock.Hash(), currentBlock.NumberU64())
-	externTd := new(big.Int).Add(block.Difficulty(), ptd)
+	work, err := forge.HeaderWork(bc.chainConfig, block.Header())
+	if err != nil {
+		return NonStatTy, err
+	}
+	externTd := new(big.Int).Add(work, ptd)
 
 	// Irrelevant of the canonical status, write the block itself to the database
 	if err := bc.hc.WriteTd(block.Hash(), block.NumberU64(), externTd); err != nil {
@@ -1099,7 +1104,15 @@ func (bc *BlockChain) insertChain(chain types.Blocks) (int, []interface{}, []*ty
 			// until the competitor TD goes above the canonical TD
 			currentBlock := bc.CurrentBlock()
 			localTd := bc.GetTd(currentBlock.Hash(), currentBlock.NumberU64())
-			externTd := new(big.Int).Add(bc.GetTd(block.ParentHash(), block.NumberU64()-1), block.Difficulty())
+			parentTd := bc.GetTd(block.ParentHash(), block.NumberU64()-1)
+			if parentTd == nil {
+				return i, events, coalescedLogs, consensus.ErrUnknownAncestor
+			}
+			work, workErr := forge.HeaderWork(bc.chainConfig, block.Header())
+			if workErr != nil {
+				return i, events, coalescedLogs, workErr
+			}
+			externTd := new(big.Int).Add(parentTd, work)
 			if localTd.Cmp(externTd) > 0 {
 				if err = bc.WriteBlockWithoutState(block, externTd); err != nil {
 					return i, events, coalescedLogs, err

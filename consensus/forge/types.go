@@ -14,10 +14,11 @@ import (
 )
 
 const (
-	ProofVersion    = uint8(1)
-	TemplateVersion = uint8(1)
-	MaxProofSize    = 16 * 1024
-	MaxMinerExtra   = 32
+	ProofVersion       = uint8(1)
+	TemplateVersion    = uint8(1)
+	MaxProofSize       = 16 * 1024
+	MaxMinerExtra      = 32
+	MaxTemplateSigners = 16
 )
 
 var (
@@ -145,13 +146,16 @@ func DecodeProof(extra []byte) (*AuxPowProof, error) {
 	if len(extra) < len(proofMagic)+1 {
 		return nil, errors.New("truncated forge proof envelope")
 	}
-	if extra[len(proofMagic)] == 3 {
+	if extra[len(proofMagic)] == 3 || extra[len(proofMagic)] == 4 {
 		var m MultiProof
 		if err := rlp.DecodeBytes(extra[len(proofMagic)+1:], &m); err != nil {
 			return nil, err
 		}
 		if len(m.MinerExtra) > 32 {
 			return nil, errors.New("multi miner extra too long")
+		}
+		if m.Template.Version != extra[len(proofMagic)] {
+			return nil, errors.New("multi proof envelope version mismatch")
 		}
 		return &AuxPowProof{Multi: &m, MinerExtra: m.MinerExtra, ParentHeader: m.ParentHeader, ParentCoinbase: m.ParentCoinbase, ParentMerkleBranch: m.ParentMerkleBranch, Template: ExternalTemplate{ValidFrom: m.Template.ValidFrom, Expires: m.Template.Expires}}, nil
 	}
@@ -240,6 +244,9 @@ func validateConfig(c *params.ForgeConfig) error {
 	}
 	if len(c.TemplateSigners) == 0 || c.TemplateQuorum == 0 || c.TemplateQuorum > uint64(len(c.TemplateSigners)) {
 		return errors.New("invalid FORGE template signer quorum")
+	}
+	if rogue && len(c.TemplateSigners) > MaxTemplateSigners {
+		return errors.New("template signer set exceeds the bounded certificate capacity")
 	}
 	seen := make(map[common.Address]struct{})
 	for _, signer := range c.TemplateSigners {

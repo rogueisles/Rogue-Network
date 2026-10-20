@@ -49,7 +49,15 @@ func NewBlockValidator(config *params.ChainConfig, blockchain *BlockChain, engin
 // header's transaction and uncle roots. The headers are assumed to be already
 // validated at this point.
 func (v *BlockValidator) ValidateBody(block *types.Block) error {
-	// Check whether the block's known, and if not, that it's linkable
+	// A known header does not authenticate a supplied replacement body.
+	// Activated commitments must precede both state-availability shortcuts.
+	activated := v.config.IsRogue(block.Number())
+	if activated {
+		if err := v.validateBodyCommitments(block); err != nil {
+			return err
+		}
+	}
+	// Check whether the block's known, and if not, that it's linkable.
 	if v.bc.HasBlockAndState(block.Hash(), block.NumberU64()) {
 		return ErrKnownBlock
 	}
@@ -59,6 +67,13 @@ func (v *BlockValidator) ValidateBody(block *types.Block) error {
 		}
 		return consensus.ErrPrunedAncestor
 	}
+	if activated {
+		return nil
+	}
+	return v.validateBodyCommitments(block)
+}
+
+func (v *BlockValidator) validateBodyCommitments(block *types.Block) error {
 	// Header validity is known at this point, check the uncles and transactions
 	header := block.Header()
 	if err := v.engine.VerifyUncles(v.bc, block); err != nil {

@@ -1,6 +1,7 @@
 package forge
 
 import (
+	"bytes"
 	"errors"
 	"github.com/TeamEGEM/go-egem/common"
 	"github.com/TeamEGEM/go-egem/crypto"
@@ -10,6 +11,7 @@ import (
 
 const MultiExternalMask uint8 = 31
 const MultiDomain = "OGG-FORGE-MULTI-TEMPLATE-V3-WORK"
+const MultiDomainV4 = "RGN-FORGE-MULTI-TEMPLATE-V4-WORK"
 
 type MultiAuxRef struct {
 	ChainID uint32
@@ -60,7 +62,7 @@ func MultiChainBit(id uint32) uint8 {
 	return 0
 }
 func MultiTemplateValid(t MultiTemplate) error {
-	if t.Version != 3 || t.Mask == 0 || t.Mask & ^MultiExternalMask != 0 || t.ValidFrom == 0 || t.Expires <= t.ValidFrom || t.Expires-t.ValidFrom > 300 {
+	if (t.Version != 3 && t.Version != 4) || t.Mask == 0 || t.Mask & ^MultiExternalMask != 0 || t.ValidFrom == 0 || t.Expires <= t.ValidFrom || t.Expires-t.ValidFrom > 300 {
 		return errors.New("invalid multi-chain participation or validity")
 	}
 	if t.ParentCoinbaseHash == (common.Hash{}) || t.ParentBranchHash == (common.Hash{}) || t.ExtraSize < 1 || t.ExtraSize > 24 || t.ExtraOffset < 42 || t.ExtraOffset > 142 {
@@ -95,11 +97,15 @@ func MultiDigest(t MultiTemplate, work common.Hash) (common.Hash, error) {
 	if work == (common.Hash{}) {
 		return common.Hash{}, errors.New("zero OGG work")
 	}
+	domain := MultiDomain
+	if t.Version == 4 {
+		domain = MultiDomainV4
+	}
 	payload := struct {
 		Domain   []byte
 		Template MultiTemplate
 		WorkHash common.Hash
-	}{[]byte(MultiDomain), t, work}
+	}{[]byte(domain), t, work}
 	b, err := rlp.EncodeToBytes(payload)
 	if err != nil {
 		return common.Hash{}, err
@@ -114,21 +120,37 @@ func ValidateMultiSignatures(t MultiTemplate, work common.Hash, sigs [][]byte, a
 	if t.ValidFrom != stamp || quorum == 0 || quorum > uint64(len(allowed)) {
 		return errors.New("invalid multi-chain work timestamp or quorum")
 	}
+	strict := t.Version == 4
+	if strict && (len(allowed) > MaxTemplateSigners || uint64(len(sigs)) != quorum) {
+		return errors.New("invalid bounded multi-chain certificate size")
+	}
 	authorized := map[common.Address]bool{}
 	for _, a := range allowed {
 		authorized[a] = true
 	}
 	seen := map[common.Address]bool{}
+	var previous common.Address
 	for _, sig := range sigs {
 		if len(sig) != 65 || !crypto.ValidateSignatureValues(sig[64], new(big.Int).SetBytes(sig[:32]), new(big.Int).SetBytes(sig[32:64]), true) {
+			if strict {
+				return errors.New("invalid multi-chain certificate signature")
+			}
 			continue
 		}
 		pub, e := crypto.SigToPub(digest.Bytes(), sig)
 		if e == nil {
 			a := crypto.PubkeyToAddress(*pub)
 			if authorized[a] {
+				if strict && (seen[a] || (len(seen) != 0 && bytes.Compare(previous[:], a[:]) >= 0)) {
+					return errors.New("multi-chain certificate signatures are not uniquely ordered")
+				}
 				seen[a] = true
+				previous = a
+			} else if strict {
+				return errors.New("unauthorized multi-chain certificate signer")
 			}
+		} else if strict {
+			return errors.New("invalid multi-chain certificate recovery")
 		}
 	}
 	if uint64(len(seen)) < quorum {

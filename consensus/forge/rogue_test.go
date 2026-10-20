@@ -37,6 +37,7 @@ func TestRogueNativeBindingsMatrix(t *testing.T) {
 	c.Forge.LTCPayoutScriptHash = ScriptHash(dgb)
 	c.Forge.DOGEPayoutScriptHash = ScriptHash(doge)
 	accepted := 0
+	superseded := 0
 	for _, row := range rows {
 		hb, _ := hex.DecodeString(row.HeaderRLP)
 		var h types.Header
@@ -49,6 +50,13 @@ func TestRogueNativeBindingsMatrix(t *testing.T) {
 			t.Fatal(e)
 		}
 		e = verifyMultiBindings(c.Forge, &h, p.Multi)
+		if p.Multi != nil && p.Multi.Template.Version == 3 {
+			if e == nil {
+				t.Fatal("superseded certificate admitted under activated rules")
+			}
+			superseded++
+			continue
+		}
 		want := row.Mask == 1 || row.Mask == 2 || row.Mask == 3
 		if (e == nil) != want {
 			t.Fatalf("mask %d acceptance wrong: %v", row.Mask, e)
@@ -57,7 +65,10 @@ func TestRogueNativeBindingsMatrix(t *testing.T) {
 			accepted++
 		}
 	}
-	if accepted != 3 {
+	if superseded == len(rows) {
+		return
+	}
+	if accepted != 3 || superseded != 0 {
 		t.Fatal("missing DGB-only, DOGE-only or both bindings")
 	}
 }

@@ -1,104 +1,43 @@
-ROGUE NETWORK / RGN -- B100 SOURCE QUALIFICATION
-2026-10-20T12:19:36.509901+00:00
+SOURCE VALIDATION AND BUILD SCOPE
 
-Source engineering review evidence complete: True
-Manual source upload for user/GitHub review: authorized by the user.
-Production activation: NOT CLEARED. No publication, Docker build or live upgrade.
-The archives ending -b100-candidate supersede earlier economic source snapshots.
+Passed: final relevant node suite; affected race-enabled core/eth tests; canonical
+V4 binding/mutation rejection; fork-choice full/header/receipt/pruned paths and
+peer messages; rewards/reorg/restart/tail/exhaustion cases; isolated pool/Redis
+race suite; V4 signer DGB-only/DOGE-only/both proposal fixtures with/without witness;
+saved-intent recovery; compiled V4 Stratum shares and two forced crash recoveries.
+Node and pool native binaries reproduce byte-for-byte from separate clean roots.
+The comment audit found no network/AI-authoring labels in first-party Go comments.
 
-APPROVED EXACT EMISSION
-Profile rgn-mainnet-v2, activation 1100100. Start 1100 RGN, option B multiplier
-0.999999807871237324305429716870248633, then capped 100 RGN tail.
-Tail begins at 13580767; 19518160 full tail rewards precede a final
-2.010331721973212466 RGN at 33098927. Subsidy is zero from 33098928.
-The exact prefix is 5204842797281179394669193552 wei. Normal issuance is
-7156658799291511116642406018 wei. With historical and special issuance the
-lifetime gross total is exactly 10700000000000000000000000000 wei (10.7B RGN).
-Fees retain their existing policy; burns cannot reopen emission allowance.
-Go/Python independent exhaustive certificates agree on all 12480667 floor
-values and sequence SHA256 682939cf440811061341524ab7cdb092d705a1fd11e62ce71c838031156b7171.
-The 40/30/20/10 split, 300M height 1100110 and 36 monthly 50M credits remain.
+The real V4 process test mines pool shares, not a canonical-target V4 chain block.
+Native proposal tests use private mocks, not owned production DGB/DOGE daemons.
+Future-height state fixtures use trusted checkpoints and explicitly skip seals.
+The prior historical replay through 1066800 covers 167068 transactions and their
+state/receipts/seals. Unknown future history has not been replayed.
+Separate automated source review is not an external security audit.
 
-CURRENT REVISION TESTS
-Relevant core/consensus/eth/downloader/miner/params and offline-command suites
-passed. Native-lab proof subset/binding matrices passed. Complete historical
-issuance and new declining-prefix regressions passed. Current persisted tests
-cover activation, special credits, all 36 monthly due heights, tail onset,
-last partial reward, zero thereafter, heavier alternate chains and restart.
-The current actual-replayed-state fork rehearsal passed using a read-only base
-and a separate overlay. The pool proxy/storage/RPC/payout/signer suites passed
-race detection against a new disposable Redis; no existing Redis was used.
-Pool tests include canonical subsidy, fees, special-credit exclusion and the
-new 100/final-partial/zero reward vectors. Four earlier reviewed accounting and
-configuration corrections remain included and rechecked.
+Pinned local toolchain: Go 1.16.15, with C/C++ compilers. Build only in a separate
+checkout, with no live data directory or service action. In the node source root:
+  sh build/env.sh /absolute/path/to/go1.16.15/bin/go build -o /tmp/rgn-review-egem ./cmd/egem
+  sh build/qualify-rogue-source.sh /absolute/path/to/go1.16.15/bin/go
+The qualification command runs local tests and does not configure production.
 
-PROOF AND STATE SCOPE
-The previously mined first-H block
-0xf84636d7e9ceed0c104ea41ff1d52eec30710945e0a98f483cf09cb5acd8b7ad
-was revalidated with the current verifier: original seal valid; all 12 mutated
-proof variants rejected. The complete block reconstructed byte for byte and
-passed consensus/state import plus database restart under explicit v2 config.
-The original public capture stayed unchanged. Only a labelled derived public
-configuration changed its schedule identifier from v1 to v2 for this recheck.
-This is reuse of a valid unchanged first-H block, not new mining. The prior
-v1 H+1..H+11 state roots do not prove changed v2 rewards after H.
+In the separate pool source root, build the pool with the pinned Go toolchain:
+  /absolute/path/to/go1.16.15/bin/go build -mod=readonly -o /tmp/rgn-review-pool .
+  /absolute/path/to/go1.16.15/bin/go build -mod=readonly -o /tmp/rgn-review-signer ./cmd/forge-live-signer
+Read scripts/test-rogue-source.py --help for disposable Redis tests. No production
+Redis endpoint, signing key or mining rental is required by those local tests.
 
-ORIGINAL SOURCE AND HISTORICAL REPLAY
-Both original mainnet source captures have 2393 identical files. Exact original
-build environments reproduced the deployed binaries byte for byte:
-  Nodes 1/2: 94af112232251c0c99e792e231f47c4fb87c0d582ad65d3ee32cf212bc6b6583
-  Nodes 3/4: 2a2245870ed29e58f33ad9c82ca77b5b2ad108c0c301b81688a028c9fa715af4
-All four selected source baselines were unchanged at the recorded read-only
-checks. The candidate builds on that baseline with explicit reviewed changes;
-it is not expected to be byte-identical to the old source. Original genesis and
-historical engine/EVM/reward/account rules are preserved.
-Full historical replay through 1066800 executed 167068 transactions and verified
-every real ProgPoW seal, state root and receipt, matching the four-node checkpoint:
-hash 0x72ae77232348d5af1cf6eeb4723389901d4a310993ef2baa3f1e4f0ba2522533
-state 0xd4c58a3339ab7c43b3aa405766ca66e2d912f53cacd8440e8b231b96ae519b67.
-That full replay predates v2 and the later startup guards; historical validation
-logic is unchanged. Current tests and the real-replayed-state fork overlay were
-rerun for v2. Unknown future history from the checkpoint to H is not replayed.
-Current source inventories and candidate-vs-baseline diffs accompany the evidence.
+WHAT REMAINS BEFORE LIVE UPGRADES
+1. Freeze permanent production signer identities/services, independent native-data
+   access, quorum, difficulty and validity settings into one common configuration.
+2. Complete successful real-miner canonical-target V4 block sealing/import and
+   owned native-node proposal validation. Earlier V3 mining does not qualify V4.
+3. Refresh backups and check all four running nodes' source/build/configuration,
+   a common canonical block, and that activation is still safely ahead.
+4. Prepare the explorer backend/frontend update so reward display, indexing,
+   supply and APR follow the new rules while retaining indexed history.
 
-REPRODUCIBLE NATIVE BUILDS
-Separate clean roots/caches produced byte-identical node builds and pool builds.
-Current runtime dependency files match both copies. Toolchain Go 1.16.15,
-GCC/G++ 15.2.0, Linux amd64; normalized flags and inputs are recorded in
-reproducible-builds-b100-tail.json. These are qualification fingerprints only:
-  node: 907691764c61aeb2560c5a65d3c18e69666be98e6ba2101efcad83dc19ffc8a6
-  pool: 406f1cae9d690776515d5d5d9c9155e7a2b3e28887b312432a9a9896d2115c34
-No executable is included in the source archives and no Docker build was run.
-
-COMMENTS AND REVIEW
-The current parser audit found zero mainnet/testnet/D14/AI-authoring comment
-matches in 915 first-party node Go files and 138 first-party pool Go files.
-Licenses, directives, functional string values/identifiers and vendored
-dependencies remain intact. Reports retain factual environment and test scope.
-The separately authorized automated reviewer found no actionable arithmetic or
-boundary defect in the B100 revision and confirmed the earlier four corrections
-remain intact. The reviewer inspected code and vectors but did not run the
-tests or independently repeat the full prefix; the parent ran those checks.
-An earlier broader task was stopped by an automated security filter. Broader
-consensus/security review is incomplete; no external security audit is claimed.
-
-RETAINED OPERATIONAL EVIDENCE
-Individual and combined DGB/DOGE source outages passed. Controlled accounting
-reconciliation, maturation/payout restoration and a fresh confirmed payment passed.
-The earlier saved six-record crash case passed copied-ledger recovery/restart
-without duplicate credits/candidates, preserving original data and services.
-These establish their recorded unchanged operational paths, not general recovery
-of arbitrary missing bodies or independent production signer availability.
-The user accepts timing and requests no further tuning. Target remains 12s;
-recorded longer average 16.014s and latest 30-block average 14.367s are measurements,
-not a promise of exact sustained target timing. DOGE treasury block discovery is
-unverified and deferred by the user; invalid proposals/proofs cannot be deferred.
-
-REMAINING PRODUCTION GATES
-  - Freeze and test permanent public production signer identities/services, quorum, native backend independence, difficulty and validity settings; preserve approved native treasury commitments.
-  - Complete the broader consensus/security review, including custom retarget, attestor availability/trust and old/new work-domain fork choice. The completed separate automated correctness review is narrower than an external security audit.
-  - Repeat live four-node height/configuration/source/build preflight before any upgrade; confirm 1100100 is still ahead and install the same reviewed configuration without resetting history.
-
-Read RGN-FORK-SPEC.txt, SOURCE-TESTING.txt and REMAINING-RELEASE-CHECKS.txt.
-Manual source review/upload does not activate the fork. No live config, source
-checkout, executable, chain database, wallet, DNS or website was changed here.
+The corrected local tests and builds are useful evidence, not a guarantee that
+a live rollout cannot stall. Missing quorum or mismatched node/pool settings can
+stop post-activation mining. The next server steps must be coordinated manually.
+No server upgrade, GitHub write or Docker build was performed by packaging.

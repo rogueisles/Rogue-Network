@@ -204,6 +204,18 @@ func roguePersistedScenario(t *testing.T, base ethdb.Database, baseRoot common.H
 		return blocks
 	}
 	check := func(branch types.Blocks) {
+		totalWork := big.NewInt(1000000000000)
+		for _, b := range branch {
+			work, err := forge.HeaderWork(cfg, b.Header())
+			if err != nil {
+				t.Fatal(err)
+			}
+			totalWork.Add(totalWork, work)
+		}
+		head := chain.CurrentBlock()
+		if got := GetTd(store, head.Hash(), head.NumberU64()); got == nil || got.Cmp(totalWork) != 0 {
+			t.Fatalf("persisted total work mismatch: %v / %s", got, totalWork)
+		}
 		st, e := chain.State()
 		if e != nil {
 			t.Fatal(e)

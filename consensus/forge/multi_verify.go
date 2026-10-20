@@ -20,7 +20,11 @@ func EncodeMultiProof(p *MultiProof) ([]byte, error) {
 	if e != nil {
 		return nil, e
 	}
-	out := append([]byte{'O', 'G', 'G', 'F', 3}, b...)
+	version := p.Template.Version
+	if version != 3 && version != 4 {
+		return nil, errors.New("unsupported multi proof version")
+	}
+	out := append([]byte{'O', 'G', 'G', 'F', version}, b...)
 	if len(out) > MaxProofSize {
 		return nil, errors.New("multi proof too large")
 	}
@@ -98,6 +102,9 @@ func verifyMultiBindings(c *params.ForgeConfig, h *types.Header, p *MultiProof) 
 		return err
 	}
 	t := p.Template
+	if c.RewardSchedule == params.RogueRewardSchedule && t.Version != 4 {
+		return errors.New("activated proof requires a mined V4 certificate")
+	}
 	if c.RewardSchedule == params.RogueRewardSchedule && t.Mask & ^uint8(3) != 0 {
 		return errors.New("RGN mainnet proof contains a disabled external chain")
 	}
@@ -133,6 +140,24 @@ func verifyMultiBindings(c *params.ForgeConfig, h *types.Header, p *MultiProof) 
 		return errors.New("invalid parent extranonce authorization")
 	}
 	normalized := append([]byte{}, p.ParentCoinbase...)
+	certificateIndex := -1
+	if t.Version == 4 {
+		certificateOffset, index, err := certificatePayloadOffset(parent)
+		if err != nil {
+			return err
+		}
+		if certificateOffset < end || certificateOffset+32 > len(normalized) {
+			return errors.New("certificate commitment overlaps the extranonce or transaction boundary")
+		}
+		digest, err := MultiCertificateDigest(t, work, p.Signatures)
+		if err != nil || !bytes.Equal(normalized[certificateOffset:certificateOffset+32], digest[:]) {
+			return errors.New("certificate differs from mined parent commitment")
+		}
+		for i := certificateOffset; i < certificateOffset+32; i++ {
+			normalized[i] = 0
+		}
+		certificateIndex = index
+	}
 	for i := off; i < end; i++ {
 		normalized[i] = 0
 	}
@@ -159,7 +184,11 @@ func verifyMultiBindings(c *params.ForgeConfig, h *types.Header, p *MultiProof) 
 		if !bytes.Equal(p.ParentHeader[4:36], make([]byte, 32)) || binary.LittleEndian.Uint32(p.ParentHeader[:4]) != 1 || binary.LittleEndian.Uint32(p.ParentHeader[72:76]) != 0x1d00ffff || len(p.ParentMerkleBranch) != 0 {
 			return errors.New("invalid synthetic Scrypt carrier")
 		}
-		if len(parent.Outputs) != 1 || parent.Outputs[0].Value != 0 || !bytes.Equal(parent.Outputs[0].Script, []byte{0x6a}) {
+		wantOutputs := 1
+		if t.Version == 4 {
+			wantOutputs = 2
+		}
+		if len(parent.Outputs) != wantOutputs || (t.Version == 4 && certificateIndex != 1) || parent.Outputs[0].Value != 0 || !bytes.Equal(parent.Outputs[0].Script, []byte{0x6a}) {
 			return errors.New("synthetic carrier cannot claim native revenue")
 		}
 	}

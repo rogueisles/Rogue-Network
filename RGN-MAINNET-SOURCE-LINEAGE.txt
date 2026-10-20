@@ -34,10 +34,12 @@ builds and remaining gates. Source lineage is not deployment approval
 or a guarantee that the fork contains no defect. Existing servers were
 not rebuilt, replaced, restarted or upgraded by these source reads.
 
-CURRENT B100 REVISION
-The latest economic revision is rgn-mainnet-v2, using approved option B decay
-and a capped 100 RGN tail. Current node/pool regressions, independent exact
-prefix calculations, first-H block/state revalidation and clean builds passed.
-The historical path remains unchanged. Current diffs compare this v2 source
-against the same preserved original baseline; earlier candidate archives are
-superseded. Manual source review/upload is authorized, not production activation.
+CURRENT CORRECTED SNAPSHOT
+Profile rgn-mainnet-v3 / proof V4. The B100 economic implementation and historical
+reward execution functions match the earlier uploaded snapshot. Original source
+captures and original deployed-binary reproduction remain the recorded lineage.
+The accompanying current comparisons are generated against both the earlier
+uploaded source and the captured original build source from the server ending .195.
+These are local comparisons to recorded captures, not fresh live server reads.
+The original validation order is preserved before activation; strengthened body
+checks apply to the activated profile. Production readiness remains false.

@@ -31,6 +31,7 @@ import (
 	"github.com/TeamEGEM/go-egem/core"
 	"github.com/TeamEGEM/go-egem/core/state"
 	"github.com/TeamEGEM/go-egem/core/types"
+	"github.com/TeamEGEM/go-egem/internal/ethapi"
 	"github.com/TeamEGEM/go-egem/log"
 	"github.com/TeamEGEM/go-egem/miner"
 	"github.com/TeamEGEM/go-egem/params"
@@ -111,6 +112,7 @@ func (api *PublicMinerAPI) GetWork() ([4]string, error) {
 // AuxBlockWork is the FORGE Scrypt merged-mining job returned by
 // eth_createAuxBlock. All integer quantities are JSON-RPC hex values.
 type AuxBlockWork struct {
+	ProofVersion        hexutil.Uint64 `json:"proofVersion"`
 	WorkHash            common.Hash    `json:"workHash"`
 	Target              common.Hash    `json:"target"`
 	Height              hexutil.Uint64 `json:"height"`
@@ -123,19 +125,8 @@ type AuxBlockWork struct {
 	MinerReward         *hexutil.Big   `json:"minerReward"`
 }
 
-// OGGBlockReward is the canonical native OGG reward split for a block height.
-type OGGBlockReward struct {
-	BlockNumber     hexutil.Uint64 `json:"blockNumber"`
-	Total           *hexutil.Big   `json:"total"`
-	Miner           *hexutil.Big   `json:"miner"`
-	Staking         *hexutil.Big   `json:"staking"`
-	Tribe           *hexutil.Big   `json:"tribe"`
-	Maintenance     *hexutil.Big   `json:"maintenance"`
-	P2E             *hexutil.Big   `json:"p2e"`
-	Treasury        *hexutil.Big   `json:"treasury"`
-	SpecialIssuance *hexutil.Big   `json:"specialIssuance"`
-	CurrencySymbol  string         `json:"currencySymbol"`
-}
+// OGGBlockReward retains the public response type used by explorer clients.
+type OGGBlockReward = ethapi.OGGBlockReward
 
 func hexBigCopy(v *big.Int) *hexutil.Big {
 	if v == nil {
@@ -166,7 +157,18 @@ func (api *PublicMinerAPI) CreateAuxBlock() (*AuxBlockWork, error) {
 
 func formatAuxBlockWork(work *miner.AuxWork, cfg *params.ChainConfig) *AuxBlockWork {
 	reward := oggreward.RewardBreakdown(cfg, new(big.Int).SetUint64(work.Height))
+	version := uint64(1)
+	if cfg.Forge.AllowAuxTree {
+		version = 2
+	}
+	if cfg.Forge.RequireMulti {
+		version = 3
+	}
+	if cfg.IsRogue(new(big.Int).SetUint64(work.Height)) {
+		version = 4
+	}
 	return &AuxBlockWork{
+		ProofVersion:        hexutil.Uint64(version),
 		WorkHash:            work.Hash,
 		Target:              common.BytesToHash(work.Target.Bytes()),
 		Height:              hexutil.Uint64(work.Height),
@@ -187,30 +189,67 @@ func (api *PublicMinerAPI) SubmitAuxBlock(workHash common.Hash, proof hexutil.By
 }
 
 func canonicalBlockReward(config *params.ChainConfig, height uint64) *OGGBlockReward {
-	reward := oggreward.RewardBreakdown(config, new(big.Int).SetUint64(height))
+	number := new(big.Int).SetUint64(height)
+	reward := oggreward.RewardBreakdown(config, number)
+	recipients := oggreward.RewardRecipients(config, number)
 	special, symbol := new(big.Int), "OGG"
-	if config != nil && config.IsRogue(new(big.Int).SetUint64(height)) {
-		special = oggreward.RogueSpecialIssuance(new(big.Int).SetUint64(height))
+	var specialAddress *common.Address
+	if config != nil && config.IsRogue(number) {
+		special = oggreward.RogueSpecialIssuance(number)
 		symbol = params.RogueCurrencySymbol
+		if special.Sign() != 0 {
+			address := recipients.Treasury
+			specialAddress = &address
+		}
+	} else if height == oggreward.HistoricalTribeSeedBlock {
+		special.Set(oggreward.HistoricalTribeSeed)
+		address := recipients.Tribe
+		specialAddress = &address
 	}
 	return &OGGBlockReward{
-		BlockNumber:     hexutil.Uint64(height),
-		Total:           hexBigCopy(reward.Total),
-		Miner:           hexBigCopy(reward.Miner),
-		Staking:         hexBigCopy(reward.Staking),
-		Tribe:           hexBigCopy(reward.Tribe),
-		Maintenance:     hexBigCopy(reward.Maintenance),
-		P2E:             hexBigCopy(reward.P2E),
-		Treasury:        hexBigCopy(reward.Treasury),
-		SpecialIssuance: hexBigCopy(special),
-		CurrencySymbol:  symbol,
+		BlockNumber:            hexutil.Uint64(height),
+		Total:                  hexBigCopy(reward.Total),
+		Miner:                  hexBigCopy(reward.Miner),
+		Staking:                hexBigCopy(reward.Staking),
+		Tribe:                  hexBigCopy(reward.Tribe),
+		Maintenance:            hexBigCopy(reward.Maintenance),
+		P2E:                    hexBigCopy(reward.P2E),
+		Treasury:               hexBigCopy(reward.Treasury),
+		SpecialIssuance:        hexBigCopy(special),
+		CurrencySymbol:         symbol,
+		TotalReward:            hexBigCopy(reward.Total),
+		MinerReward:            hexBigCopy(reward.Miner),
+		StakingReward:          hexBigCopy(reward.Staking),
+		StakingAddress:         recipients.Staking,
+		TribeReward:            hexBigCopy(reward.Tribe),
+		TribeAddress:           recipients.Tribe,
+		MaintenanceReward:      hexBigCopy(reward.Maintenance),
+		MaintenanceAddress:     recipients.Maintenance,
+		P2EReward:              hexBigCopy(reward.P2E),
+		P2EAddress:             recipients.P2E,
+		TreasuryReward:         hexBigCopy(reward.Treasury),
+		TreasuryAddress:        recipients.Treasury,
+		SpecialIssuanceAddress: specialAddress,
 	}
 }
 
-// GetBlockReward returns the canonical consensus reward split used by block
-// finalisation. It intentionally has no duplicate reward formula in the RPC.
-func (api *PublicMinerAPI) GetBlockReward(blockNumber hexutil.Uint64) *OGGBlockReward {
-	return canonicalBlockReward(api.e.BlockChain().Config(), uint64(blockNumber))
+// GetBlockReward returns the subsidy and recipients for an existing or pending
+// block. Transaction fees are not part of the subsidy. Unknown blocks return null.
+// Height zero retains the nominal schedule quote for compatibility; genesis
+// allocations are not included in that quote. Pending blocks have no block hash.
+func (api *PublicMinerAPI) GetBlockReward(ctx context.Context, blockNumber rpc.BlockNumber) (*OGGBlockReward, error) {
+	block, err := api.e.ApiBackend.BlockByNumber(ctx, blockNumber)
+	if err != nil || block == nil {
+		return nil, err
+	}
+	reward := canonicalBlockReward(api.e.BlockChain().Config(), block.NumberU64())
+	reward.MinerAddress = block.Coinbase()
+	reward.Pending = blockNumber == rpc.PendingBlockNumber
+	if !reward.Pending {
+		hash := block.Hash()
+		reward.BlockHash = &hash
+	}
+	return reward, nil
 }
 
 // SubmitHashrate can be used for remote miners to submit their hash rate. This enables the node to report the combined

@@ -13,8 +13,9 @@ import (
 var mergedMiningMagic = []byte{0xfa, 0xbe, 0x6d, 0x6d}
 
 type txOutput struct {
-	Value  uint64
-	Script []byte
+	Value        uint64
+	Script       []byte
+	ScriptOffset int
 }
 
 type parsedCoinbase struct {
@@ -140,9 +141,10 @@ func parseCoinbase(tx []byte) (*parsedCoinbase, error) {
 		if n > 10000 || off+int(n) > len(tx) {
 			return nil, errors.New("invalid coinbase output script length")
 		}
+		scriptOffset := off
 		script := append([]byte(nil), tx[off:off+int(n)]...)
 		off += int(n)
-		outs = append(outs, txOutput{Value: value, Script: script})
+		outs = append(outs, txOutput{Value: value, Script: script, ScriptOffset: scriptOffset})
 	}
 	if off+4 != len(tx) {
 		return nil, errors.New("unexpected trailing coinbase bytes")

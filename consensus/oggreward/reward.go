@@ -132,6 +132,26 @@ func RewardDestinations(blockNum *big.Int) (common.Address, common.Address, comm
 	return legacyStakingAddress, legacyTribeAddress, maintenanceAddress
 }
 
+// Recipients identifies the destinations for normal subsidy allocations.
+// Inactive allocations have the zero address.
+type Recipients struct {
+	Staking     common.Address
+	Tribe       common.Address
+	Maintenance common.Address
+	P2E         common.Address
+	Treasury    common.Address
+}
+
+// RewardRecipients uses the same height and configuration selection as reward
+// execution, including the historical destination migration.
+func RewardRecipients(config *params.ChainConfig, blockNum *big.Int) Recipients {
+	if config != nil && config.IsRogue(blockNum) {
+		return Recipients{Staking: stakingAddress, P2E: rogueP2EAddress, Treasury: maintenanceAddress}
+	}
+	staking, tribe, maintenance := RewardDestinations(blockNum)
+	return Recipients{Staking: staking, Tribe: tribe, Maintenance: maintenance}
+}
+
 // HistoricalExtraIssuanceThrough returns native one-time issuance created on
 // or before height. This is used when calculating the frozen pre-FORGE gross
 // issuance value for the 10.7B lifetime cap.

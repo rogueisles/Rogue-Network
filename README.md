@@ -9,15 +9,17 @@ the approved 10.7 billion issuance ceiling, a declining 1,100 RGN starting subsi
 the 40/30/20/10 mining/staking/P2E/treasury split and the scheduled treasury credits.
 Existing staking and Tribe contract state is preserved; future Tribe funding ends.
 
-Read [RGN-FORK-SPEC.txt](RGN-FORK-SPEC.txt) for the exact rules. The source handoff
-also includes the qualification report and manual upgrade notes. Production proof
-settings and the remaining miner-backed checks must be completed before release.
+This revision uses profile `rgn-mainnet-v3` and V4 proof certificates. Read
+[RGN-FORK-SPEC.txt](RGN-FORK-SPEC.txt) for the exact rules and
+[RGN-SOURCE-HANDOFF.txt](RGN-SOURCE-HANDOFF.txt) for the snapshot's build/review
+status. Production signer settings and the V4 miner-backed checks remain pending.
 The unchanged genesis file does not silently activate the new profile: every node
 must later receive the same reviewed fork configuration before activation.
 
 For local source checks with Go 1.16.15, run
 `sh build/qualify-rogue-source.sh /absolute/path/to/go`.
-The supplied proof fixtures use private lab difficulty and are labelled accordingly.
+V4 fixtures use synthetic templates and unmined canonical-target headers. Older
+private-difficulty fixtures retain their explicitly bounded scope.
 No Docker build, publication, DNS change or server upgrade is part of this handoff.
 
 The original upstream documentation follows for attribution and historical reference.

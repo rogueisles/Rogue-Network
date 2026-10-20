@@ -1,48 +1,28 @@
-SOURCE TESTING -- LOCAL OR ISOLATED ENVIRONMENTS
+SOURCE VALIDATION AND BUILD SCOPE
 
-Qualified toolchain: Linux amd64, Go 1.16.15, GCC/G++ 15.2.0. Exact environment
-and normalized build flags are in the clean-build report. No Docker is required.
-The node retains its vendored GOPATH layout. From its repository root:
+Passed: final relevant node suite; affected race-enabled core/eth tests; canonical
+V4 binding/mutation rejection; fork-choice full/header/receipt/pruned paths and
+peer messages; rewards/reorg/restart/tail/exhaustion cases; isolated pool/Redis
+race suite; V4 signer DGB-only/DOGE-only/both proposal fixtures with/without witness;
+saved-intent recovery; compiled V4 Stratum shares and two forced crash recoveries.
+Node and pool native binaries reproduce byte-for-byte from separate clean roots.
+The comment audit found no network/AI-authoring labels in first-party Go comments.
 
-  sh build/qualify-rogue-source.sh /absolute/path/to/go
+The real V4 process test mines pool shares, not a canonical-target V4 chain block.
+Native proposal tests use private mocks, not owned production DGB/DOGE daemons.
+Future-height state fixtures use trusted checkpoints and explicitly skip seals.
+The prior historical replay through 1066800 covers 167068 transactions and their
+state/receipts/seals. Unknown future history has not been replayed.
+Separate automated source review is not an external security audit.
 
-This runs relevant core/consensus/eth/miner/params/offline-command suites,
-the complete historical reward prefix, the exhaustive 12480667-reward declining
-prefix certificate and public native proof/subset/binding fixtures. Fixtures
-use private lab difficulty and are not new production-target mining evidence.
-Tail/cap regressions cover before/at/after onset, the final partial reward,
-zero thereafter, state import, competing branches, replay and restart.
+Pinned local toolchain: Go 1.16.15, with C/C++ compilers. Build only in a separate
+checkout, with no live data directory or service action. In the node source root:
+  sh build/env.sh /absolute/path/to/go1.16.15/bin/go build -o /tmp/rgn-review-egem ./cmd/egem
+  sh build/qualify-rogue-source.sh /absolute/path/to/go1.16.15/bin/go
+The qualification command runs local tests and does not configure production.
 
-To repeat the complete prefix calculation independently without a database:
-
-  /absolute/path/to/go run cmd/rogue-emission-check/main.go -bits 384
-
-The tool uses only the standard library and certifies every floored reward
-using outward-rounded integer bounds. Both independent recorded implementations
-agree on the exact sum and per-reward sequence hash. Its expected sum is
-5204842797281179394669193552 wei. Check the entire reported JSON, not just exit.
-
-Development node build (not the normalized reproducibility recipe):
-
-  GO111MODULE=off sh build/env.sh /absolute/path/to/go build ./cmd/egem
-
-The pool retains its own go.mod/go.sum. Obtain pinned modules before an offline
-test. Use a Redis executable only for a new disposable local test instance:
-
-  python3 scripts/test-rogue-source.py --go /absolute/path/to/go     --redis-server /absolute/path/to/redis-server     --report-dir /absolute/NEW/local-test-report
-
-The report directory must not exist. The runner checks the new Redis process,
-uses an unused loopback port and a temporary empty directory, then stops that
-process. It does not use the operator's Redis or change a live pool.
-
-The optional rogue-replay utility accepts the unchanged original genesis with
-explicit v2 config, a public canonical RLP archive and a NEW isolated database.
-Supply expected final height/hash/state root. Real historical seal verification
-is enabled by default; -verify-seals=false explicitly labels a state-only run.
-The full archived replay predates the v2 economic revision; the historical
-validation path is unchanged. The real replayed state fork rehearsal was rerun
-for v2 in a separate overlay with a read-only marked snapshot base.
-Future-height state tests use a trusted checkpoint and test-only sealing bypass;
-they do not claim unknown future history or independent production signers.
-
-No command in this document upgrades servers, publishes source or builds Docker.
+In the separate pool source root, build the pool with the pinned Go toolchain:
+  /absolute/path/to/go1.16.15/bin/go build -mod=readonly -o /tmp/rgn-review-pool .
+  /absolute/path/to/go1.16.15/bin/go build -mod=readonly -o /tmp/rgn-review-signer ./cmd/forge-live-signer
+Read scripts/test-rogue-source.py --help for disposable Redis tests. No production
+Redis endpoint, signing key or mining rental is required by those local tests.
