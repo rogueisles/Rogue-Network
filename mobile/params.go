@@ -26,13 +26,13 @@ import (
 	"github.com/TeamEGEM/go-egem/params"
 )
 
-// MainnetGenesis returns the JSON spec to use for the main Ethereum network. It
-// is actually empty since that defaults to the hard coded binary genesis block.
+// Return an empty specification to select the built-in genesis block.
+// The default initialization path supplies its state and chain configuration.
 func MainnetGenesis() string {
 	return ""
 }
 
-// TestnetGenesis returns the JSON spec to use for the Ethereum test network.
+// Return the serialized Ropsten genesis specification.
 func TestnetGenesis() string {
 	enc, err := json.Marshal(core.DefaultTestnetGenesisBlock())
 	if err != nil {

@@ -209,9 +209,9 @@ func (pm *ProtocolManager) synchronise(peer *peer) {
 		// We've completed a sync cycle, notify all peers of new state. This path is
 		// essential in star-topology networks where a gateway node needs to notify
 		// all its out-of-date peers of the availability of a new block. This failure
-		// scenario will most often crop up in private and hackathon networks with
-		// degenerate connectivity, but it should be healthy for the mainnet too to
-		// more reliably update peers or the local TD state.
+		// scenario is most common in isolated networks with limited connectivity.
+		// Broadcasting the head also helps connected peers refresh their view
+		// of the chain and its total difficulty.
 		go pm.BroadcastBlock(head, false)
 	}
 }

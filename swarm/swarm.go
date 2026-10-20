@@ -230,8 +230,8 @@ func newEnsClient(endpoint string, addr common.Address, config *api.Config) (*en
 }
 
 // detectEnsAddr determines the ENS contract address by getting both the
-// version and genesis hash using the client and matching them to either
-// mainnet or testnet addresses
+// version and genesis hash using the client and matching them to the
+// corresponding network's configured addresses.
 func detectEnsAddr(client *rpc.Client) (common.Address, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

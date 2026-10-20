@@ -27,6 +27,7 @@ import (
 
 	"github.com/TeamEGEM/go-egem/common"
 	"github.com/TeamEGEM/go-egem/common/hexutil"
+	"github.com/TeamEGEM/go-egem/consensus/oggreward"
 	"github.com/TeamEGEM/go-egem/core"
 	"github.com/TeamEGEM/go-egem/core/state"
 	"github.com/TeamEGEM/go-egem/core/types"
@@ -105,6 +106,111 @@ func (api *PublicMinerAPI) GetWork() ([4]string, error) {
 		return work, fmt.Errorf("mining not ready: %v", err)
 	}
 	return work, nil
+}
+
+// AuxBlockWork is the FORGE Scrypt merged-mining job returned by
+// eth_createAuxBlock. All integer quantities are JSON-RPC hex values.
+type AuxBlockWork struct {
+	WorkHash            common.Hash    `json:"workHash"`
+	Target              common.Hash    `json:"target"`
+	Height              hexutil.Uint64 `json:"height"`
+	Timestamp           hexutil.Uint64 `json:"timestamp"`
+	TemplateMaxValidity hexutil.Uint64 `json:"templateMaxValidity"`
+	AuxChainID          hexutil.Uint64 `json:"auxChainId"`
+	DogeAuxChainID      hexutil.Uint64 `json:"dogeAuxChainId"`
+	PreviousBlockHash   common.Hash    `json:"previousBlockHash"`
+	Difficulty          *hexutil.Big   `json:"difficulty"`
+	MinerReward         *hexutil.Big   `json:"minerReward"`
+}
+
+// OGGBlockReward is the canonical native OGG reward split for a block height.
+type OGGBlockReward struct {
+	BlockNumber     hexutil.Uint64 `json:"blockNumber"`
+	Total           *hexutil.Big   `json:"total"`
+	Miner           *hexutil.Big   `json:"miner"`
+	Staking         *hexutil.Big   `json:"staking"`
+	Tribe           *hexutil.Big   `json:"tribe"`
+	Maintenance     *hexutil.Big   `json:"maintenance"`
+	P2E             *hexutil.Big   `json:"p2e"`
+	Treasury        *hexutil.Big   `json:"treasury"`
+	SpecialIssuance *hexutil.Big   `json:"specialIssuance"`
+	CurrencySymbol  string         `json:"currencySymbol"`
+}
+
+func hexBigCopy(v *big.Int) *hexutil.Big {
+	if v == nil {
+		v = new(big.Int)
+	}
+	cp := new(big.Int).Set(v)
+	return (*hexutil.Big)(cp)
+}
+
+// CreateAuxBlock returns the current post-FORGE candidate for external Scrypt
+// merged mining. The work hash excludes the eventual AuxPoW proof envelope.
+func (api *PublicMinerAPI) CreateAuxBlock() (*AuxBlockWork, error) {
+	if !api.e.IsMining() {
+		if err := api.e.StartMining(false); err != nil {
+			return nil, err
+		}
+	}
+	work, err := api.agent.CreateAuxWork(nil)
+	if err != nil {
+		return nil, fmt.Errorf("FORGE mining not ready: %v", err)
+	}
+	cfg := api.e.BlockChain().Config()
+	if cfg == nil || cfg.Forge == nil || !cfg.IsForge(new(big.Int).SetUint64(work.Height)) {
+		return nil, fmt.Errorf("FORGE is not active at height %d", work.Height)
+	}
+	return formatAuxBlockWork(work, cfg), nil
+}
+
+func formatAuxBlockWork(work *miner.AuxWork, cfg *params.ChainConfig) *AuxBlockWork {
+	reward := oggreward.RewardBreakdown(cfg, new(big.Int).SetUint64(work.Height))
+	return &AuxBlockWork{
+		WorkHash:            work.Hash,
+		Target:              common.BytesToHash(work.Target.Bytes()),
+		Height:              hexutil.Uint64(work.Height),
+		Timestamp:           hexutil.Uint64(work.Timestamp),
+		TemplateMaxValidity: hexutil.Uint64(cfg.Forge.TemplateMaxValidity),
+		AuxChainID:          hexutil.Uint64(cfg.Forge.AuxChainID),
+		DogeAuxChainID:      hexutil.Uint64(cfg.Forge.DogeAuxChainID),
+		PreviousBlockHash:   work.PreviousBlockHash,
+		Difficulty:          hexBigCopy(work.Difficulty),
+		MinerReward:         hexBigCopy(reward.Miner),
+	}
+}
+
+// SubmitAuxBlock attaches and validates a FORGE AuxPoW proof for previously
+// issued work. Unknown, stale, malformed or invalid proofs return false.
+func (api *PublicMinerAPI) SubmitAuxBlock(workHash common.Hash, proof hexutil.Bytes) bool {
+	return api.agent.SubmitAuxWork(workHash, []byte(proof))
+}
+
+func canonicalBlockReward(config *params.ChainConfig, height uint64) *OGGBlockReward {
+	reward := oggreward.RewardBreakdown(config, new(big.Int).SetUint64(height))
+	special, symbol := new(big.Int), "OGG"
+	if config != nil && config.IsRogue(new(big.Int).SetUint64(height)) {
+		special = oggreward.RogueSpecialIssuance(new(big.Int).SetUint64(height))
+		symbol = params.RogueCurrencySymbol
+	}
+	return &OGGBlockReward{
+		BlockNumber:     hexutil.Uint64(height),
+		Total:           hexBigCopy(reward.Total),
+		Miner:           hexBigCopy(reward.Miner),
+		Staking:         hexBigCopy(reward.Staking),
+		Tribe:           hexBigCopy(reward.Tribe),
+		Maintenance:     hexBigCopy(reward.Maintenance),
+		P2E:             hexBigCopy(reward.P2E),
+		Treasury:        hexBigCopy(reward.Treasury),
+		SpecialIssuance: hexBigCopy(special),
+		CurrencySymbol:  symbol,
+	}
+}
+
+// GetBlockReward returns the canonical consensus reward split used by block
+// finalisation. It intentionally has no duplicate reward formula in the RPC.
+func (api *PublicMinerAPI) GetBlockReward(blockNumber hexutil.Uint64) *OGGBlockReward {
+	return canonicalBlockReward(api.e.BlockChain().Config(), uint64(blockNumber))
 }
 
 // SubmitHashrate can be used for remote miners to submit their hash rate. This enables the node to report the combined

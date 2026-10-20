@@ -1,0 +1,48 @@
+SOURCE TESTING -- LOCAL OR ISOLATED ENVIRONMENTS
+
+Qualified toolchain: Linux amd64, Go 1.16.15, GCC/G++ 15.2.0. Exact environment
+and normalized build flags are in the clean-build report. No Docker is required.
+The node retains its vendored GOPATH layout. From its repository root:
+
+  sh build/qualify-rogue-source.sh /absolute/path/to/go
+
+This runs relevant core/consensus/eth/miner/params/offline-command suites,
+the complete historical reward prefix, the exhaustive 12480667-reward declining
+prefix certificate and public native proof/subset/binding fixtures. Fixtures
+use private lab difficulty and are not new production-target mining evidence.
+Tail/cap regressions cover before/at/after onset, the final partial reward,
+zero thereafter, state import, competing branches, replay and restart.
+
+To repeat the complete prefix calculation independently without a database:
+
+  /absolute/path/to/go run cmd/rogue-emission-check/main.go -bits 384
+
+The tool uses only the standard library and certifies every floored reward
+using outward-rounded integer bounds. Both independent recorded implementations
+agree on the exact sum and per-reward sequence hash. Its expected sum is
+5204842797281179394669193552 wei. Check the entire reported JSON, not just exit.
+
+Development node build (not the normalized reproducibility recipe):
+
+  GO111MODULE=off sh build/env.sh /absolute/path/to/go build ./cmd/egem
+
+The pool retains its own go.mod/go.sum. Obtain pinned modules before an offline
+test. Use a Redis executable only for a new disposable local test instance:
+
+  python3 scripts/test-rogue-source.py --go /absolute/path/to/go     --redis-server /absolute/path/to/redis-server     --report-dir /absolute/NEW/local-test-report
+
+The report directory must not exist. The runner checks the new Redis process,
+uses an unused loopback port and a temporary empty directory, then stops that
+process. It does not use the operator's Redis or change a live pool.
+
+The optional rogue-replay utility accepts the unchanged original genesis with
+explicit v2 config, a public canonical RLP archive and a NEW isolated database.
+Supply expected final height/hash/state root. Real historical seal verification
+is enabled by default; -verify-seals=false explicitly labels a state-only run.
+The full archived replay predates the v2 economic revision; the historical
+validation path is unchanged. The real replayed state fork rehearsal was rerun
+for v2 in a separate overlay with a read-only marked snapshot base.
+Future-height state tests use a trusted checkpoint and test-only sealing bypass;
+they do not claim unknown future history or independent production signers.
+
+No command in this document upgrades servers, publishes source or builds Docker.

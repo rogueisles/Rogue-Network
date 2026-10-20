@@ -1291,7 +1291,10 @@ func testHighTDStarvationAttack(t *testing.T, protocol int, mode SyncMode) {
 	hashes, headers, blocks, receipts := tester.makeChain(0, 0, tester.genesis, nil, false)
 	tester.newPeer("attack", protocol, []common.Hash{hashes[0]}, headers, blocks, receipts)
 
-	if err := tester.sync("attack", big.NewInt(1000000), mode); err != errStallingPeer {
+	// OGG's genesis difficulty exceeds the old Ethereum test's absolute
+	// 1,000,000 claim. Advertise genuinely higher TD to exercise starvation.
+	claimedTD := new(big.Int).Add(tester.genesis.Difficulty(), big.NewInt(1000000))
+	if err := tester.sync("attack", claimedTD, mode); err != errStallingPeer {
 		t.Fatalf("synchronisation error mismatch: have %v, want %v", err, errStallingPeer)
 	}
 }

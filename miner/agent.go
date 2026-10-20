@@ -17,6 +17,7 @@
 package miner
 
 import (
+	"math/big"
 	"sync"
 
 	"sync/atomic"
@@ -100,6 +101,11 @@ out:
 }
 
 func (self *CpuAgent) mine(work *Work, stop <-chan struct{}) {
+	// FORGE is externally merged mined. Do not ask the local CPU agent to seal
+	// post-fork work (which would only produce an expected error/no-result).
+	if aware, ok := self.engine.(interface{ IsForge(*big.Int) bool }); ok && aware.IsForge(work.Block.Number()) {
+		return
+	}
 	if result, err := self.engine.Seal(self.chain, work.Block, stop); result != nil {
 		log.Info("Successfully sealed new block", "number", result.Number(), "hash", result.Hash())
 		self.returnCh <- &Result{work, result}

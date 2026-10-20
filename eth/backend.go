@@ -31,6 +31,7 @@ import (
 	"github.com/TeamEGEM/go-egem/consensus"
 	"github.com/TeamEGEM/go-egem/consensus/clique"
 	"github.com/TeamEGEM/go-egem/consensus/ethash"
+	"github.com/TeamEGEM/go-egem/consensus/forge"
 	"github.com/TeamEGEM/go-egem/consensus/progpow"
 	"github.com/TeamEGEM/go-egem/core"
 	"github.com/TeamEGEM/go-egem/core/bloombits"
@@ -213,19 +214,26 @@ func CreateDB(ctx *node.ServiceContext, config *Config, name string) (ethdb.Data
 
 // CreateConsensusEngine creates the required type of consensus engine instance for an Ethereum service
 func CreateConsensusEngine(ctx *node.ServiceContext, config *ethash.Config, chainConfig *params.ChainConfig, db ethdb.Database) consensus.Engine {
+	if err := chainConfig.CheckRogueHistoricalRules(); err != nil {
+		log.Crit("Invalid RGN consensus configuration", "err", err)
+	}
 	// Proof-of-authority
 	if chainConfig.Clique != nil {
 		return clique.New(chainConfig.Clique, db)
 	}
-	// ProgPoW proof-of-work
+	// ProgPoW proof-of-work. When FORGE is configured, wrap the exact legacy
+	// engine so historical blocks remain ProgPoW and ForgeBlock switches only
+	// new blocks to Scrypt/AuxPoW. Existing proof rules remain in effect while
+	// ForgeBlock/Forge are unset.
 	if chainConfig.ProgPoW != nil {
+		var legacy consensus.Engine
 		switch {
 		case config.PowMode == ethash.ModeFake:
 			log.Warn("ProgPoW used in fake mode")
-			return progpow.NewFaker()
+			legacy = progpow.NewFaker()
 		case config.PowMode == ethash.ModeTest:
 			log.Warn("ProgPoW used in test mode")
-			return progpow.NewTester()
+			legacy = progpow.NewTester()
 		default:
 			engine := progpow.New(progpow.Config{
 				CacheDir:       ctx.ResolvePath(config.CacheDir),
@@ -236,8 +244,16 @@ func CreateConsensusEngine(ctx *node.ServiceContext, config *ethash.Config, chai
 				DatasetsOnDisk: config.DatasetsOnDisk,
 			})
 			engine.SetThreads(-1) // Disable CPU mining (GPU miners connect via RPC)
-			return engine
+			legacy = engine
 		}
+		if chainConfig.ForgeBlock != nil && chainConfig.Forge != nil {
+			hybrid, err := forge.NewHybrid(chainConfig, legacy)
+			if err != nil {
+				log.Crit("Invalid FORGE consensus configuration", "err", err)
+			}
+			return hybrid
+		}
+		return legacy
 	}
 	// Default: Ethash proof-of-work
 	switch {
@@ -372,10 +388,10 @@ func (s *Ethereum) StartMining(local bool) error {
 		clique.Authorize(eb, wallet.SignHash)
 	}
 	if local {
-		// If local (CPU) mining is started, we can disable the transaction rejection
-		// mechanism introduced to speed sync times. CPU mining on mainnet is ludicrous
-		// so noone will ever hit this path, whereas marking sync done on CPU mining
-		// will ensure that private networks work in single miner mode too.
+		// Starting local CPU mining marks synchronization complete so transactions
+		// can be accepted. This bypasses the rejection mechanism used during sync
+		// and allows an isolated network to process transactions with a single
+		// local miner.
 		atomic.StoreUint32(&s.protocolManager.acceptTxs, 1)
 	}
 	go s.miner.Start(eb)

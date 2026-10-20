@@ -244,10 +244,14 @@ func (self *worker) update() {
 	defer self.txSub.Unsubscribe()
 	defer self.chainHeadSub.Unsubscribe()
 	defer self.chainSideSub.Unsubscribe()
+	forgeRefresh := time.NewTicker(time.Second)
+	defer forgeRefresh.Stop()
 
 	for {
 		// A real event arrived, process interesting content
 		select {
+		case now := <-forgeRefresh.C:
+			self.refreshForgeWork(now)
 		// Handle ChainHeadEvent
 		case <-self.chainHeadCh:
 			self.commitNewWork()
@@ -285,6 +289,33 @@ func (self *worker) update() {
 			return
 		}
 	}
+}
+
+// Refresh through commitNewWork, which re-executes transactions and finalizes
+// state. Merely rewriting an issued header's Time/Difficulty could invalidate
+// TIMESTAMP-dependent execution and would also change already-issued WorkHash.
+func (self *worker) refreshForgeWork(now time.Time) bool {
+	if atomic.LoadInt32(&self.mining) != 1 || self.config == nil || self.config.Forge == nil {
+		return false
+	}
+	self.currentMu.Lock()
+	due := false
+	if self.current != nil && self.current.Block != nil && self.config.IsForge(self.current.Block.Number()) {
+		interval := uint64(5)
+		if half := self.config.Forge.TemplateMaxValidity / 2; half < interval {
+			interval = half
+		}
+		if interval == 0 {
+			interval = 1
+		}
+		stamp := self.current.Block.Time()
+		due = now.Unix() >= 0 && stamp.IsUint64() && uint64(now.Unix()) >= stamp.Uint64() && uint64(now.Unix())-stamp.Uint64() >= interval
+	}
+	self.currentMu.Unlock()
+	if due {
+		self.commitNewWork()
+	}
+	return due
 }
 
 func (self *worker) wait() {
@@ -456,27 +487,32 @@ func (self *worker) commitNewWork() {
 	txs := types.NewTransactionsByPriceAndNonce(self.current.signer, pending)
 	work.commitTransactions(self.mux, txs, self.chain, self.coinbase)
 
-	// compute uncles for the new block.
-	var (
-		uncles    []*types.Header
-		badUncles []common.Hash
-	)
-	for hash, uncle := range self.possibleUncles {
-		if len(uncles) == 2 {
-			break
+	// Compute uncles for legacy blocks only. FORGE consensus prohibits uncles,
+	// so post-fork candidates are finalized with an empty uncle list and stale
+	// side-chain candidates are discarded instead of accumulating forever.
+	var uncles []*types.Header
+	if self.config.IsForge(header.Number) {
+		for hash := range self.possibleUncles {
+			delete(self.possibleUncles, hash)
 		}
-		if err := self.commitUncle(work, uncle.Header()); err != nil {
-			log.Trace("Bad uncle found and will be removed", "hash", hash)
-			log.Trace(fmt.Sprint(uncle))
-
-			badUncles = append(badUncles, hash)
-		} else {
-			log.Debug("Committing new uncle to block", "hash", hash)
-			uncles = append(uncles, uncle.Header())
+	} else {
+		var badUncles []common.Hash
+		for hash, uncle := range self.possibleUncles {
+			if len(uncles) == 2 {
+				break
+			}
+			if err := self.commitUncle(work, uncle.Header()); err != nil {
+				log.Trace("Bad uncle found and will be removed", "hash", hash)
+				log.Trace(fmt.Sprint(uncle))
+				badUncles = append(badUncles, hash)
+			} else {
+				log.Debug("Committing new uncle to block", "hash", hash)
+				uncles = append(uncles, uncle.Header())
+			}
 		}
-	}
-	for _, hash := range badUncles {
-		delete(self.possibleUncles, hash)
+		for _, hash := range badUncles {
+			delete(self.possibleUncles, hash)
+		}
 	}
 	// Create the new block to seal with the consensus engine
 	if work.Block, err = self.engine.Finalize(self.chain, header, work.state, work.txs, uncles, work.receipts); err != nil {

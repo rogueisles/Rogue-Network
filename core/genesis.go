@@ -153,6 +153,11 @@ func SetupGenesisBlock(db ethdb.Database, genesis *Genesis) (*params.ChainConfig
 	if genesis != nil && genesis.Config == nil {
 		return params.AllEthashProtocolChanges, common.Hash{}, errGenesisNoConfig
 	}
+	if genesis != nil {
+		if err := genesis.Config.CheckRogueHistoricalRules(); err != nil {
+			return genesis.Config, common.Hash{}, err
+		}
+	}
 
 	// Just commit the new block if there is no stored genesis block.
 	stored := GetCanonicalHash(db, 0)
@@ -186,9 +191,12 @@ func SetupGenesisBlock(db ethdb.Database, genesis *Genesis) (*params.ChainConfig
 		}
 		return newcfg, stored, err
 	}
-	// Special case: don't change the existing config of a non-mainnet chain if no new
-	// config is supplied. These chains would get AllProtocolChanges (and a compat error)
-	// if we just continued here.
+	if err := storedcfg.CheckRogueHistoricalRules(); err != nil {
+		return storedcfg, stored, err
+	}
+	// Preserve an existing custom chain configuration when no replacement is
+	// supplied. Otherwise, the fallback would apply AllProtocolChanges and
+	// could introduce a compatibility error.
 	if genesis == nil && stored != params.MainnetGenesisHash {
 		return storedcfg, stored, nil
 	}
@@ -200,7 +208,16 @@ func SetupGenesisBlock(db ethdb.Database, genesis *Genesis) (*params.ChainConfig
 		return newcfg, stored, fmt.Errorf("missing block number for head header hash")
 	}
 	compatErr := storedcfg.CheckCompatible(newcfg, height)
-	if compatErr != nil && height != 0 && compatErr.RewindTo != 0 {
+	// Full and light-node startup automatically rewind on a bare
+	// ConfigCompatError. An active RGN schedule must instead fail closed:
+	// removing it or changing its rules cannot rewrite imported history as
+	// a side effect of startup. Wrap the error so these callers stop before
+	// opening a chain with the conflicting configuration. Pre-fork upgrades
+	// and non-RGN compatibility handling keep their inherited behavior.
+	if compatErr != nil && (compatErr.What == "RGN historical consensus engine" || storedcfg.IsRogue(new(big.Int).SetUint64(height)) || newcfg.IsRogue(new(big.Int).SetUint64(height))) {
+		return newcfg, stored, fmt.Errorf("RGN configuration conflicts with imported history; refusing automatic rewind: %w", compatErr)
+	}
+	if compatErr != nil && height != 0 && (compatErr.RewindTo != 0 || compatErr.What == "FORGE parameters" || compatErr.What == "FORGE fork block") {
 		return newcfg, stored, compatErr
 	}
 	return newcfg, stored, WriteChainConfig(db, stored, newcfg)
@@ -263,6 +280,9 @@ func (g *Genesis) ToBlock(db ethdb.Database) *types.Block {
 // Commit writes the block and state of a genesis specification to the database.
 // The block is committed as the canonical head block.
 func (g *Genesis) Commit(db ethdb.Database) (*types.Block, error) {
+	if err := g.Config.CheckRogueHistoricalRules(); err != nil {
+		return nil, err
+	}
 	block := g.ToBlock(db)
 	if block.Number().Sign() != 0 {
 		return nil, fmt.Errorf("can't commit genesis block with number > 0")
@@ -321,7 +341,7 @@ func DefaultGenesisBlock() *Genesis {
 	}
 }
 
-// DefaultTestnetGenesisBlock returns the Ropsten network genesis block.
+// Return the predefined Ropsten genesis block.
 func DefaultTestnetGenesisBlock() *Genesis {
 	return &Genesis{
 		Config:     params.TestnetChainConfig,
@@ -367,7 +387,7 @@ func DeveloperGenesisBlock(period uint64, faucet common.Address) *Genesis {
 			common.BytesToAddress([]byte{6}): {Balance: big.NewInt(1)}, // ECAdd
 			common.BytesToAddress([]byte{7}): {Balance: big.NewInt(1)}, // ECScalarMul
 			common.BytesToAddress([]byte{8}): {Balance: big.NewInt(1)}, // ECPairing
-			faucet: {Balance: new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 256), big.NewInt(9))},
+			faucet:                           {Balance: new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 256), big.NewInt(9))},
 		},
 	}
 }

@@ -57,7 +57,7 @@ type NodeConfig struct {
 	EthereumNetworkID int64 // uint64 in truth, but Java can't handle that...
 
 	// EthereumGenesis is the genesis JSON to use to seed the blockchain with. An
-	// empty genesis state is equivalent to using the mainnet's state.
+	// empty value selects the built-in genesis state.
 	EthereumGenesis string
 
 	// EthereumDatabaseCache is the system memory in MB to allocate for database caching.
@@ -129,12 +129,12 @@ func NewNode(datadir string, config *NodeConfig) (stack *Node, _ error) {
 
 	var genesis *core.Genesis
 	if config.EthereumGenesis != "" {
-		// Parse the user supplied genesis spec if not mainnet
+		// Parse the explicitly supplied genesis specification.
 		genesis = new(core.Genesis)
 		if err := json.Unmarshal([]byte(config.EthereumGenesis), genesis); err != nil {
 			return nil, fmt.Errorf("invalid genesis spec: %v", err)
 		}
-		// If we have the testnet, hard code the chain configs too
+		// Apply the predefined chain configuration for the Ropsten genesis.
 		if config.EthereumGenesis == TestnetGenesis() {
 			genesis.Config = params.TestnetChainConfig
 			if config.EthereumNetworkID == 1 {

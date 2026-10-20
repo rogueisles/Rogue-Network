@@ -1,0 +1,57 @@
+REMAINING PRODUCTION RELEASE CHECKS -- OPTION B / 100 RGN TAIL
+20 October 2026
+
+The complete B100 source may be manually uploaded for user/GitHub review.
+Source review is distinct from production activation. No live update occurred.
+
+1. Freeze and test the production public proof configuration.
+Prepare 2-of-3 independently validating signer services on separate servers.
+Freeze their permanent PUBLIC addresses/quorum, independently checked native
+backends, initial/minimum difficulty and validity settings. Preserve the approved
+DGB/DOGE treasury commitments. Local ephemeral signers sharing one host/backend
+do not demonstrate production independence. Do not generate or publish keys as
+part of a source upload. Any final settings change needs appropriate validation.
+
+2. Complete the broader consensus/security review.
+The separate automated reviewer completed scoped correctness rechecks of four
+earlier findings and the approved B100 arithmetic/boundaries. No unresolved issue
+was found in that scope. This is not a completed broader security or external
+audit. Review signer trust/availability, custom retarget/resource behavior,
+old/new work-domain fork choice and deep reorganisations. Preserved staking
+bytecode/storage does not audit its claim/yield/funding economics.
+
+3. Recheck all four current heads/configurations before deployment.
+Confirm 1100100 is still ahead and compare the exact reviewed source/build and
+identical public configuration. Keep original genesis, databases, account state
+and peer identities; take recoverable backups. Never move only the JSON fork
+height or reuse a reward-profile identifier for different economics. If H must
+move, review source, issuance snapshot and curve again.
+
+Completed engineering checks and their limits
+- Original four-node source lineage and deployed-binary reproduction passed.
+- Full real historical seals, transactions, state roots and receipt replay
+  passed through 1066800 under the unchanged historical path. It was not a new
+  full v2 replay of unknown future blocks.
+- Current v2 exact declining-prefix sum, all special releases, finite 100 tail,
+  last partial reward, cap exhaustion, reorg and restart regressions passed.
+- Current relevant node suites and isolated pool race/integration checks passed;
+  separate-root clean native builds and source manifests accompany the archives.
+- The prior real-miner v1 boundary sample passed H..H+11 and the 300M allocation.
+  Its first H block is unchanged at 1100 RGN and is rechecked with the v2 verifier
+  and full state import. Do not claim the v1 H+1..H+11 roots prove new v2 rewards.
+- Prior DGB-off/DOGE-only, DOGE-off/DGB-only and both-down recovery checks passed.
+  Reconciled maturation/payments and a fresh confirmed payout passed. Relevant
+  pool/proof behavior is unchanged; no new rental is needed to repeat it.
+- The saved crash case passed complete copied-ledger positive reconciliation,
+  replay and restart without duplicate credits/candidates. Its original evidence
+  is preserved; fixture-specific recovery is not a general missing-body service.
+- A native DOGE treasury reward remains unverified. Discovery is deferred by the
+  user; this does not waive incorrect templates, destinations or rejected proofs.
+
+Timing is accepted by the user. Keep the 12-second configured target and current
+retarget unchanged. Recorded measured averages are not a promise of exact timing.
+Supply years are target-block projections starting at activation.
+
+After the production gates pass, coordinate four peer-node upgrades and the
+pool-side peer/endpoints. Native DGB/DOGE daemons retain their own software/data.
+Docker, DNS, website and pool presentation follow later with the user.

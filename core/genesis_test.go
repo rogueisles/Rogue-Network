@@ -29,20 +29,24 @@ import (
 	"github.com/TeamEGEM/go-egem/params"
 )
 
+// Pin the inherited fixture hash independently of the legacy network
+// constant, which identifies a different genesis block.
+var legacyTestnetFixtureHash = common.HexToHash("0x1031923d8a7c4957675b1a80a78f94c0d4901c4c0d9385d7586f259c299c2962")
+
 func TestDefaultGenesisBlock(t *testing.T) {
 	block := DefaultGenesisBlock().ToBlock(nil)
 	if block.Hash() != params.MainnetGenesisHash {
 		t.Errorf("wrong mainnet genesis hash, got %v, want %v", block.Hash(), params.MainnetGenesisHash)
 	}
 	block = DefaultTestnetGenesisBlock().ToBlock(nil)
-	if block.Hash() != params.TestnetGenesisHash {
-		t.Errorf("wrong testnet genesis hash, got %v, want %v", block.Hash(), params.TestnetGenesisHash)
+	if block.Hash() != legacyTestnetFixtureHash {
+		t.Errorf("wrong testnet fixture genesis hash, got %v, want %v", block.Hash(), legacyTestnetFixtureHash)
 	}
 }
 
 func TestSetupGenesis(t *testing.T) {
 	var (
-		customghash = common.HexToHash("0x89c99d90b79719238d2645c7642f2c9295246e80775b38cfd162b696817fbd50")
+		customghash = common.HexToHash("0x2ee7621510b1438ed1ee344ab21c750582766ecbbfa06f48039339307da47a38")
 		customg     = Genesis{
 			Config: &params.ChainConfig{HomesteadBlock: big.NewInt(3)},
 			Alloc: GenesisAlloc{
@@ -99,8 +103,8 @@ func TestSetupGenesis(t *testing.T) {
 				customg.MustCommit(db)
 				return SetupGenesisBlock(db, DefaultTestnetGenesisBlock())
 			},
-			wantErr:    &GenesisMismatchError{Stored: customghash, New: params.TestnetGenesisHash},
-			wantHash:   params.TestnetGenesisHash,
+			wantErr:    &GenesisMismatchError{Stored: customghash, New: legacyTestnetFixtureHash},
+			wantHash:   legacyTestnetFixtureHash,
 			wantConfig: params.TestnetChainConfig,
 		},
 		{

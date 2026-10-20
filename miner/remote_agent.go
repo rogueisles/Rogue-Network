@@ -18,8 +18,8 @@ package miner
 
 import (
 	"errors"
+	"fmt"
 	"math/big"
-        "fmt"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -27,6 +27,7 @@ import (
 	"github.com/TeamEGEM/go-egem/common"
 	"github.com/TeamEGEM/go-egem/consensus"
 	"github.com/TeamEGEM/go-egem/consensus/ethash"
+	"github.com/TeamEGEM/go-egem/consensus/forge"
 	"github.com/TeamEGEM/go-egem/core/types"
 	"github.com/TeamEGEM/go-egem/log"
 )
@@ -34,6 +35,23 @@ import (
 type hashrate struct {
 	ping time.Time
 	rate uint64
+}
+
+// AuxWork is the FORGE work package issued to an external Scrypt merged miner.
+// Target is the integer Scrypt target for the OGG candidate.
+type AuxWork struct {
+	Hash              common.Hash
+	Target            *big.Int
+	Height            uint64
+	Timestamp         uint64
+	Difficulty        *big.Int
+	PreviousBlockHash common.Hash
+}
+
+type auxWorkItem struct {
+	work      *Work
+	block     *types.Block
+	createdAt time.Time
 }
 
 type RemoteAgent struct {
@@ -47,6 +65,7 @@ type RemoteAgent struct {
 	engine      consensus.Engine
 	currentWork *Work
 	work        map[common.Hash]*Work
+	auxWork     map[common.Hash]*auxWorkItem
 
 	hashrateMu sync.RWMutex
 	hashrate   map[common.Hash]hashrate
@@ -59,6 +78,7 @@ func NewRemoteAgent(chain consensus.ChainReader, engine consensus.Engine) *Remot
 		chain:    chain,
 		engine:   engine,
 		work:     make(map[common.Hash]*Work),
+		auxWork:  make(map[common.Hash]*auxWorkItem),
 		hashrate: make(map[common.Hash]hashrate),
 	}
 }
@@ -115,6 +135,9 @@ func (a *RemoteAgent) GetWork() ([4]string, error) {
 
 	if a.currentWork != nil {
 		block := a.currentWork.Block
+		if a.chain.Config().IsForge(block.Number()) {
+			return res, errors.New("legacy getWork disabled after FORGE activation")
+		}
 
 		res[0] = block.HashNoNonce().Hex()
 		// Use the engine's SeedHash if it implements consensus.SeedHasher
@@ -132,10 +155,10 @@ func (a *RemoteAgent) GetWork() ([4]string, error) {
 		n.Div(n, block.Difficulty())
 		n.Lsh(n, 1)
 		res[2] = common.BytesToHash(n.Bytes()).Hex()
-                res[3] = fmt.Sprintf("0x%x", block.NumberU64())
+		res[3] = fmt.Sprintf("0x%x", block.NumberU64())
 
-                a.work[block.HashNoNonce()] = a.currentWork
-                return res, nil
+		a.work[block.HashNoNonce()] = a.currentWork
+		return res, nil
 	}
 	return res, errors.New("No work available yet, don't panic.")
 }
@@ -153,6 +176,10 @@ func (a *RemoteAgent) SubmitWork(nonce types.BlockNonce, mixDigest, hash common.
 		log.Info("Work submitted but none pending", "hash", hash)
 		return false
 	}
+	if a.chain.Config().IsForge(work.Block.Number()) {
+		log.Info("Legacy work submitted after FORGE activation", "hash", hash)
+		return false
+	}
 	// Make sure the Engine solutions is indeed valid
 	result := work.Block.Header()
 	result.Nonce = nonce
@@ -168,6 +195,88 @@ func (a *RemoteAgent) SubmitWork(nonce types.BlockNonce, mixDigest, hash common.
 	a.returnCh <- &Result{work, block}
 	delete(a.work, hash)
 
+	return true
+}
+
+// CreateAuxWork issues the current post-FORGE block as an OGG AuxPoW leaf.
+// MinerExtra is deliberately bounded by consensus and is part of the stable
+// WorkHash. Phase 4 RPC issues an empty MinerExtra; pool-specific use can supply
+// a bounded value later without changing the proof format.
+func (a *RemoteAgent) CreateAuxWork(minerExtra []byte) (*AuxWork, error) {
+	if len(minerExtra) > forge.MaxMinerExtra {
+		return nil, fmt.Errorf("FORGE miner extra too long: %d > %d", len(minerExtra), forge.MaxMinerExtra)
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.currentWork == nil || a.currentWork.Block == nil {
+		return nil, errors.New("no FORGE work available yet")
+	}
+	if !a.chain.Config().IsForge(a.currentWork.Block.Number()) {
+		return nil, errors.New("FORGE is not active for current work")
+	}
+	header := a.currentWork.Block.Header()
+	if header.Time == nil || !header.Time.IsUint64() || header.Time.Sign() <= 0 {
+		return nil, errors.New("invalid FORGE issued header timestamp")
+	}
+	header.Extra = append([]byte(nil), minerExtra...)
+	header.UncleHash = types.EmptyUncleHash
+	block := a.currentWork.Block.WithSeal(header)
+	hash, err := forge.WorkHash(header)
+	if err != nil {
+		return nil, err
+	}
+	target, err := forge.TargetForConfig(a.chain.Config().Forge, header.Difficulty)
+	if err != nil {
+		return nil, err
+	}
+	a.auxWork[hash] = &auxWorkItem{work: a.currentWork, block: block, createdAt: time.Now()}
+	return &AuxWork{
+		Hash:              hash,
+		Target:            new(big.Int).Set(target),
+		Height:            header.Number.Uint64(),
+		Timestamp:         header.Time.Uint64(),
+		Difficulty:        new(big.Int).Set(header.Difficulty),
+		PreviousBlockHash: header.ParentHash,
+	}, nil
+}
+
+// SubmitAuxWork validates an issued FORGE work item, attaches the bounded AuxPoW
+// envelope, verifies the Scrypt/AuxPoW seal, and routes the accepted block back
+// through the normal miner result path. Unknown or malformed work fails closed.
+func (a *RemoteAgent) SubmitAuxWork(hash common.Hash, proofBlob []byte) bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	item := a.auxWork[hash]
+	if item == nil || item.block == nil || item.work == nil {
+		log.Info("FORGE work submitted but none pending", "hash", hash)
+		return false
+	}
+	proof, err := forge.DecodeProof(proofBlob)
+	if err != nil {
+		log.Warn("Invalid FORGE proof envelope submitted", "hash", hash, "err", err)
+		return false
+	}
+	header := item.block.Header()
+	header.Extra = append([]byte(nil), proofBlob...)
+	recomputed, err := forge.WorkHash(header)
+	if err != nil || recomputed != hash {
+		log.Warn("FORGE proof does not match issued work", "hash", hash, "recomputed", recomputed, "err", err)
+		return false
+	}
+	// WorkHash replaces the proof with proof.MinerExtra. This explicit check makes
+	// the issued miner-extra binding obvious and rejects substitutions early.
+	issuedHeader := item.block.Header()
+	if string(issuedHeader.Extra) != string(proof.MinerExtra) {
+		log.Warn("FORGE miner extra does not match issued work", "hash", hash)
+		return false
+	}
+	if err := a.engine.VerifySeal(a.chain, header); err != nil {
+		log.Warn("Invalid FORGE AuxPoW submitted", "hash", hash, "err", err)
+		return false
+	}
+	block := item.block.WithSeal(header)
+	a.returnCh <- &Result{item.work, block}
+	delete(a.auxWork, hash)
 	return true
 }
 
@@ -195,6 +304,11 @@ func (a *RemoteAgent) loop(workCh chan *Work, quitCh chan struct{}) {
 			for hash, work := range a.work {
 				if time.Since(work.createdAt) > 7*(12*time.Second) {
 					delete(a.work, hash)
+				}
+			}
+			for hash, work := range a.auxWork {
+				if time.Since(work.createdAt) > 7*(12*time.Second) {
+					delete(a.auxWork, hash)
 				}
 			}
 			a.mu.Unlock()

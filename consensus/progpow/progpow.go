@@ -19,6 +19,7 @@ import (
 	"github.com/TeamEGEM/go-egem/common"
 	"github.com/TeamEGEM/go-egem/consensus"
 	"github.com/TeamEGEM/go-egem/consensus/ethash"
+	"github.com/TeamEGEM/go-egem/consensus/oggreward"
 	"github.com/TeamEGEM/go-egem/core/state"
 	"github.com/TeamEGEM/go-egem/core/types"
 	"github.com/TeamEGEM/go-egem/params"
@@ -42,7 +43,7 @@ type Config struct {
 type Mode uint
 
 const (
-	ModeNormal   Mode = iota
+	ModeNormal Mode = iota
 	ModeShared
 	ModeTest
 	ModeFake
@@ -52,12 +53,12 @@ const (
 // ProgPoW is the consensus engine implementing ProgPoW proof-of-work.
 // It satisfies both consensus.Engine and consensus.PoW.
 type ProgPoW struct {
-	config  Config
-	rand    *rand.Rand
-	threads int
-	update  chan struct{}
+	config   Config
+	rand     *rand.Rand
+	threads  int
+	update   chan struct{}
 	hashrate int64 // atomic, hashes attempted
-	lock    sync.Mutex
+	lock     sync.Mutex
 
 	// Cached Ethash dataset (ProgPoW shares the Ethash DAG per EIP-1057).
 	// dagAnchor retains a reference to the ethash dataset struct so its GC
@@ -85,7 +86,9 @@ func New(config Config) *ProgPoW {
 }
 
 // NewFaker returns a ProgPoW engine that accepts all blocks instantly.
-func NewFaker() *ProgPoW { return &ProgPoW{config: Config{PowMode: ModeFake}, update: make(chan struct{})} }
+func NewFaker() *ProgPoW {
+	return &ProgPoW{config: Config{PowMode: ModeFake}, update: make(chan struct{})}
+}
 
 // NewFullFaker returns a ProgPoW engine that skips all consensus checks.
 func NewFullFaker() *ProgPoW {
@@ -189,7 +192,7 @@ func (p *ProgPoW) Prepare(chain consensus.ChainReader, header *types.Header) err
 
 func (p *ProgPoW) Finalize(chain consensus.ChainReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header, receipts []*types.Receipt) (*types.Block, error) {
 	// OGG: use our 4-way split reward function
-	accumulateRewardsOGG(chain.Config(), state, header, uncles)
+	oggreward.AccumulateRewards(chain.Config(), state, header)
 	header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
 	return types.NewBlock(header, txs, uncles, receipts), nil
 }
@@ -200,94 +203,92 @@ func (p *ProgPoW) CalcDifficulty(chain consensus.ChainReader, time uint64, paren
 }
 
 // OGG ProgPoW Difficulty Algorithm
-// Target:    ~13s per block
-// Up:        +8.3% per fast block  (< 13s) - slow climb, prevents spikes
-// Down:      -33.3% per slow block (>= 13s) - fast drop, quick recovery
-// Emergency: >5 min gap + diff above 1M threshold -> instant -50%
-//            Below threshold: normal -33% takes over, no death spiral
-
+//
+// The live OGG chain used four historical eras. These rules are consensus
+// critical for validating the existing chain and must not be replaced by the
+// generic Homestead/Ethash formula.
 var progpowEmergencyThreshold = big.NewInt(1000001)
 
-func CalcDifficulty(config *params.ChainConfig, time uint64, parent *types.Header) *big.Int {
-    diff := new(big.Int)
-    elapsed := new(big.Int).SetUint64(time - parent.Time.Uint64())
+func CalcDifficulty(config *params.ChainConfig, timestamp uint64, parent *types.Header) *big.Int {
+	if parent == nil || parent.Difficulty == nil || parent.Time == nil {
+		return new(big.Int)
+	}
+	diff := new(big.Int)
+	elapsed := new(big.Int).SetUint64(timestamp - parent.Time.Uint64())
+	height := parent.Number.Uint64()
 
-    // Emergency: block gap > 5 minutes AND difficulty high enough to be worth halving
-    // Hard fork block 116: new difficulty algorithm
-    if parent.Number.Uint64() < 115 {
-            // Pre-fork algo: +25% up, -12.5% down, emergency -50% at 5min
-            if elapsed.Cmp(big.NewInt(300)) > 0 &&
-                    parent.Difficulty.Cmp(progpowEmergencyThreshold) > 0 {
-                    diff.Rsh(parent.Difficulty, 1) // emergency -50%
-                    if diff.Cmp(params.MinimumDifficulty) < 0 {
-                            diff.Set(params.MinimumDifficulty)
-                    }
-                    return diff
-            }
-            adjustUp := new(big.Int).Div(parent.Difficulty, big.NewInt(4))   // +25%
-            adjustDown := new(big.Int).Div(parent.Difficulty, big.NewInt(8)) // -12.5%
-            if elapsed.Cmp(big.NewInt(13)) < 0 {
-                    diff.Add(parent.Difficulty, adjustUp)
-            } else {
-                    diff.Sub(parent.Difficulty, adjustDown)
-            }
-    } else if parent.Number.Uint64() < 4100 {
-            // Era 2 (blocks 115-4099): +10% up, -10% down, target 13s, emergency -25% at 3min
-            if elapsed.Cmp(big.NewInt(180)) > 0 &&
-                    parent.Difficulty.Cmp(progpowEmergencyThreshold) > 0 {
-                    diff.Set(new(big.Int).Sub(parent.Difficulty, new(big.Int).Div(parent.Difficulty, big.NewInt(4)))) // emergency -25%
-                    if diff.Cmp(params.MinimumDifficulty) < 0 {
-                            diff.Set(params.MinimumDifficulty)
-                    }
-                    return diff
-            }
-            adjustUp := new(big.Int).Div(parent.Difficulty, big.NewInt(10))   // +10%
-            adjustDown := new(big.Int).Div(parent.Difficulty, big.NewInt(10)) // -10%
-            if elapsed.Cmp(big.NewInt(13)) < 0 {
-                    diff.Add(parent.Difficulty, adjustUp)
-            } else {
-                    diff.Sub(parent.Difficulty, adjustDown)
-            }
-    } else if parent.Number.Uint64() < 21000 {
-            // Era 3 (blocks 4100-20999): +12.5% up, -14.3% down, target 12s, emergency -25% at 3min
-            if elapsed.Cmp(big.NewInt(180)) > 0 &&
-                    parent.Difficulty.Cmp(progpowEmergencyThreshold) > 0 {
-                    diff.Set(new(big.Int).Sub(parent.Difficulty, new(big.Int).Div(parent.Difficulty, big.NewInt(4)))) // emergency -25%
-                    if diff.Cmp(params.MinimumDifficulty) < 0 {
-                            diff.Set(params.MinimumDifficulty)
-                    }
-                    return diff
-            }
-            adjustUp := new(big.Int).Div(parent.Difficulty, big.NewInt(8))   // +12.5%
-            adjustDown := new(big.Int).Div(parent.Difficulty, big.NewInt(7)) // -14.3%
-            if elapsed.Cmp(big.NewInt(12)) < 0 {
-                    diff.Add(parent.Difficulty, adjustUp)
-            } else {
-                    diff.Sub(parent.Difficulty, adjustDown)
-            }
-    } else {
-            // Era 4 (blocks 21000+): +12.5% up, -20% down, target 12s, emergency -25% at 3min
-            if elapsed.Cmp(big.NewInt(180)) > 0 &&
-                    parent.Difficulty.Cmp(progpowEmergencyThreshold) > 0 {
-                    diff.Set(new(big.Int).Sub(parent.Difficulty, new(big.Int).Div(parent.Difficulty, big.NewInt(4)))) // emergency -25%
-                    if diff.Cmp(params.MinimumDifficulty) < 0 {
-                            diff.Set(params.MinimumDifficulty)
-                    }
-                    return diff
-            }
-            adjustUp := new(big.Int).Div(parent.Difficulty, big.NewInt(8))   // +12.5%
-            adjustDown := new(big.Int).Div(parent.Difficulty, big.NewInt(5)) // -20%
-            if elapsed.Cmp(big.NewInt(12)) < 0 {
-                    diff.Add(parent.Difficulty, adjustUp)
-            } else {
-                    diff.Sub(parent.Difficulty, adjustDown)
-            }
-    }
+	// Era 1: genesis through parent 114.
+	if height < 115 {
+		if elapsed.Cmp(big.NewInt(300)) > 0 && parent.Difficulty.Cmp(progpowEmergencyThreshold) > 0 {
+			diff.Rsh(parent.Difficulty, 1) // emergency -50%
+			if diff.Cmp(params.MinimumDifficulty) < 0 {
+				diff.Set(params.MinimumDifficulty)
+			}
+			return diff
+		}
+		adjustUp := new(big.Int).Div(parent.Difficulty, big.NewInt(4))   // +25%
+		adjustDown := new(big.Int).Div(parent.Difficulty, big.NewInt(8)) // -12.5%
+		if elapsed.Cmp(big.NewInt(13)) < 0 {
+			diff.Add(parent.Difficulty, adjustUp)
+		} else {
+			diff.Sub(parent.Difficulty, adjustDown)
+		}
 
-    if diff.Cmp(params.MinimumDifficulty) < 0 {
-            diff.Set(params.MinimumDifficulty)
-    }
-    return diff
+		// Era 2: parent 115 through 4099.
+	} else if height < 4100 {
+		if elapsed.Cmp(big.NewInt(180)) > 0 && parent.Difficulty.Cmp(progpowEmergencyThreshold) > 0 {
+			diff.Sub(parent.Difficulty, new(big.Int).Div(parent.Difficulty, big.NewInt(4))) // emergency -25%
+			if diff.Cmp(params.MinimumDifficulty) < 0 {
+				diff.Set(params.MinimumDifficulty)
+			}
+			return diff
+		}
+		adjustUp := new(big.Int).Div(parent.Difficulty, big.NewInt(10))
+		adjustDown := new(big.Int).Div(parent.Difficulty, big.NewInt(10))
+		if elapsed.Cmp(big.NewInt(13)) < 0 {
+			diff.Add(parent.Difficulty, adjustUp)
+		} else {
+			diff.Sub(parent.Difficulty, adjustDown)
+		}
+
+		// Era 3: parent 4100 through 20999.
+	} else if height < 21000 {
+		if elapsed.Cmp(big.NewInt(180)) > 0 && parent.Difficulty.Cmp(progpowEmergencyThreshold) > 0 {
+			diff.Sub(parent.Difficulty, new(big.Int).Div(parent.Difficulty, big.NewInt(4))) // emergency -25%
+			if diff.Cmp(params.MinimumDifficulty) < 0 {
+				diff.Set(params.MinimumDifficulty)
+			}
+			return diff
+		}
+		adjustUp := new(big.Int).Div(parent.Difficulty, big.NewInt(8))   // +12.5%
+		adjustDown := new(big.Int).Div(parent.Difficulty, big.NewInt(7)) // -14.3%
+		if elapsed.Cmp(big.NewInt(12)) < 0 {
+			diff.Add(parent.Difficulty, adjustUp)
+		} else {
+			diff.Sub(parent.Difficulty, adjustDown)
+		}
+
+		// Era 4: parent 21000 onward.
+	} else {
+		if elapsed.Cmp(big.NewInt(180)) > 0 && parent.Difficulty.Cmp(progpowEmergencyThreshold) > 0 {
+			diff.Sub(parent.Difficulty, new(big.Int).Div(parent.Difficulty, big.NewInt(4))) // emergency -25%
+			if diff.Cmp(params.MinimumDifficulty) < 0 {
+				diff.Set(params.MinimumDifficulty)
+			}
+			return diff
+		}
+		adjustUp := new(big.Int).Div(parent.Difficulty, big.NewInt(8))   // +12.5%
+		adjustDown := new(big.Int).Div(parent.Difficulty, big.NewInt(5)) // -20%
+		if elapsed.Cmp(big.NewInt(12)) < 0 {
+			diff.Add(parent.Difficulty, adjustUp)
+		} else {
+			diff.Sub(parent.Difficulty, adjustDown)
+		}
+	}
+	if diff.Cmp(params.MinimumDifficulty) < 0 {
+		diff.Set(params.MinimumDifficulty)
+	}
+	return diff
 }
 
 // Seal implements consensus.Engine — searches for a valid nonce.
@@ -412,38 +413,38 @@ func (p *ProgPoW) verifyHeader(chain consensus.ChainReader, header, parent *type
 }
 
 func (p *ProgPoW) verifySeal(chain consensus.ChainReader, header *types.Header) error {
-        if p.config.PowMode == ModeFake || p.config.PowMode == ModeFullFake {
-                return nil
-        }
+	if p.config.PowMode == ModeFake || p.config.PowMode == ModeFullFake {
+		return nil
+	}
 
-        number := header.Number.Uint64()
-        digest, result := p.hashimoto(header, number)
+	number := header.Number.Uint64()
+	digest, result := p.hashimoto(header, number)
 
-        if digest != header.MixDigest {
-        fmt.Printf("PROGPOW DEBUG invalid mix number=%d period=%d nonce=%d haveMix=%v wantMix=%v result=%x\n",
-                number,
-                number/10,
-                header.Nonce.Uint64(),
-                header.MixDigest,
-                digest,
-                result,
-        )
+	if digest != header.MixDigest {
+		fmt.Printf("PROGPOW DEBUG invalid mix number=%d period=%d nonce=%d haveMix=%v wantMix=%v result=%x\n",
+			number,
+			number/10,
+			header.Nonce.Uint64(),
+			header.MixDigest,
+			digest,
+			result,
+		)
 
-        return fmt.Errorf("invalid mix digest: have %v, want %v", header.MixDigest, digest)
-}
+		return fmt.Errorf("invalid mix digest: have %v, want %v", header.MixDigest, digest)
+	}
 
-        target := new(big.Int).Div(maxUint256, header.Difficulty)
-if new(big.Int).SetBytes(result).Cmp(target) > 0 {
-        fmt.Printf("PROGPOW DEBUG invalid pow number=%d nonce=%d result=%x target=%x difficulty=%s\n",
-                number,
-                header.Nonce.Uint64(),
-                result,
-                target.Bytes(),
-                header.Difficulty.String(),
-        )
-        return errors.New("invalid proof-of-work")
-}
-return nil
+	target := new(big.Int).Div(maxUint256, header.Difficulty)
+	if new(big.Int).SetBytes(result).Cmp(target) > 0 {
+		fmt.Printf("PROGPOW DEBUG invalid pow number=%d nonce=%d result=%x target=%x difficulty=%s\n",
+			number,
+			header.Nonce.Uint64(),
+			result,
+			target.Bytes(),
+			header.Difficulty.String(),
+		)
+		return errors.New("invalid proof-of-work")
+	}
+	return nil
 }
 
 // hashimoto computes the ProgPoW digest and result for a header.
@@ -454,10 +455,10 @@ func (p *ProgPoW) hashimoto(header *types.Header, blockNumber uint64) (common.Ha
 	copy(hh[:], header.HashNoNonce().Bytes())
 
 	period := blockNumber / progpowPeriod
-        seed := keccakF800Short(hh, nonce)
-        dag := p.getDAGSlice(blockNumber)
-        dagSize := uint64(len(dag)) * 4
-        cache := BuildL1Cache(dag)
+	seed := keccakF800Short(hh, nonce)
+	dag := p.getDAGSlice(blockNumber)
+	dagSize := uint64(len(dag)) * 4
+	cache := BuildL1Cache(dag)
 
 	mixHash := progpowLoop(seed, dag, cache, dagSize, period)
 	finalHash := keccakF800Long(hh, nonce, mixHash)
@@ -541,104 +542,6 @@ func (p *ProgPoW) mine(block *types.Block, startNonce uint64, abort chan struct{
 			return
 		}
 		nonce++
-	}
-}
-
-// ----------------------------------------------------------------------------
-// Block rewards (ProgPoW chain — 5 EGEM base; adjust in genesis config)
-// ----------------------------------------------------------------------------
-
-// OGG Chain — Reward Variables
-// S3 Enhanced emission: 700 OGG start, decay 0.999999933042/block
-// Split: 45% miner, 40% staking, 7% tribe pool, 8% maintenance
-var (
-	// Initial block reward: 700 OGG in wei (700 * 10^18)
-	oggInitialReward, _   = new(big.Int).SetString("700000000000000000000", 10)
-
-	// Decay factor: 0.999999933042 = 999999933042 / 1000000000000
-	// Integer arithmetic only — no floats in consensus code
-	oggDecayNumerator     = big.NewInt(999999933042)
-	oggDecayDenominator   = big.NewInt(1000000000000)
-
-	// OGG reward split addresses — hardcoded at chain launch, never change
-	// Miner (45%) goes to header.Coinbase — dynamic, whoever mined the block
-	oggStakingAddress     = common.HexToAddress("0xCd442d7AC675D6c637a960e10913e341508C6672") // OGGStaking contract — 40%
-	oggTribePoolAddress   = common.HexToAddress("0xfeaD066Caa900F210B19B9df14aBc38B46a15e66") // OGGTribePool contract — 7%
-	oggMaintenanceAddress = common.HexToAddress("0x85ea896411EdFE9dD7fa6F4F5FaA19D2D81cdA5E") // Maintenance wallet — 8%
-)
-
-// computeBlockReward calculates the OGG block reward at block number n.
-// Formula: reward(n) = initialReward * (decayNumerator / decayDenominator)^n
-// Uses binary exponentiation — O(log n), no floats.
-func computeBlockReward(blockNum *big.Int) *big.Int {
-	reward := new(big.Int).Set(oggInitialReward)
-	n := blockNum.Int64()
-
-	if n == 0 {
-		return reward
-	}
-
-	numPow := new(big.Int).SetInt64(1)
-	denPow := new(big.Int).SetInt64(1)
-	base := n
-
-	numBase := new(big.Int).Set(oggDecayNumerator)
-	denBase := new(big.Int).Set(oggDecayDenominator)
-
-	for base > 0 {
-		if base%2 == 1 {
-			numPow.Mul(numPow, numBase)
-			denPow.Mul(denPow, denBase)
-		}
-		numBase.Mul(numBase, numBase)
-		denBase.Mul(denBase, denBase)
-		base /= 2
-	}
-
-	reward.Mul(reward, numPow)
-	reward.Div(reward, denPow)
-	return reward
-}
-
-// accumulateRewardsOGG distributes the OGG block reward to four recipients.
-// Split: 45% miner, 40% staking, 7% tribe pool, 8% maintenance.
-// Miner receives remainder after three fixed splits — absorbs rounding dust.
-// No uncle rewards — OGG does not use uncle/ommer rewards.
-func accumulateRewardsOGG(_ *params.ChainConfig, state *state.StateDB, header *types.Header, uncles []*types.Header) {
-	totalReward := computeBlockReward(header.Number)
-
-	stakingReward := new(big.Int).Mul(totalReward, big.NewInt(40))
-	stakingReward.Div(stakingReward, big.NewInt(100))
-
-	tribeReward := new(big.Int).Mul(totalReward, big.NewInt(7))
-	tribeReward.Div(tribeReward, big.NewInt(100))
-
-	maintenanceReward := new(big.Int).Mul(totalReward, big.NewInt(8))
-	maintenanceReward.Div(maintenanceReward, big.NewInt(100))
-
-	// Miner gets the remainder — always equals 45% plus any rounding dust
-	minerReward := new(big.Int).Set(totalReward)
-	minerReward.Sub(minerReward, stakingReward)
-	minerReward.Sub(minerReward, tribeReward)
-	minerReward.Sub(minerReward, maintenanceReward)
-
-	// Hardfork at block 21000: switch to new contract addresses
-	stakingAddr := oggStakingAddress
-	tribeAddr   := oggTribePoolAddress
-	if header.Number.Uint64() >= 21000 {
-		stakingAddr = common.HexToAddress("0xa47008c59f729756bEc7d01f6FE71328A242d0c4")
-		tribeAddr   = common.HexToAddress("0x085CF5da09842FA3BA01068CC02c156198b1b114")
-	}
-
-	state.AddBalance(header.Coinbase, minerReward)
-	state.AddBalance(stakingAddr, stakingReward)
-	state.AddBalance(tribeAddr, tribeReward)
-	state.AddBalance(oggMaintenanceAddress, maintenanceReward)
-
-	// One-time allocation at block 21001: seed new TribePool with 950,000 OGG
-	if header.Number.Uint64() == 21001 {
-		tribeSeed, _ := new(big.Int).SetString("950000000000000000000000", 10)
-		state.AddBalance(common.HexToAddress("0x085CF5da09842FA3BA01068CC02c156198b1b114"), tribeSeed)
 	}
 }
 

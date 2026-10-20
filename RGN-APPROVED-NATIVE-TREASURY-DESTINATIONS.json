@@ -1,0 +1,25 @@
+{
+  "approvedByUser": true,
+  "recordedAtUTC": "2026-10-20T11:30:58.828900+00:00",
+  "digibyte": {
+    "address": "dgb1qwp3x0ff9tcmxdymtewd8wan8tx0nsa2xph32yc",
+    "payoutScript": "0014706267a5255e3666936bcb9a777667599f387546",
+    "scriptSHA256": "0x61a5c2ea83616bd160c97438eea42824ae63f7d3359e893d8b0d777d049b059d",
+    "matchesRecordedInstalledConsensusCommitment": true
+  },
+  "dogecoin": {
+    "address": "DBz6RAy6g8381EbR1KAepmTwAEG9GxY6Fz",
+    "payoutScript": "76a9144b1508ebe06723842994adf33bdba36b4eba44c488ac",
+    "scriptSHA256": "0x68907fbe8d80920192e8a8fc611dd4f10fcf0ac29ea09a6856ed59a46da4afb7",
+    "matchesRecordedInstalledConsensusCommitment": true
+  },
+  "consensusFields": {
+    "ltcPayoutScriptHash": "0x61a5c2ea83616bd160c97438eea42824ae63f7d3359e893d8b0d777d049b059d",
+    "dogePayoutScriptHash": "0x68907fbe8d80920192e8a8fc611dd4f10fcf0ac29ea09a6856ed59a46da4afb7"
+  },
+  "scope": "Approved public native treasury destinations. Historical ltcPayoutScriptHash field names the DGB parent script commitment in this release.",
+  "alternativeDgbNotSelected": "dgb1q3fp7pqwwt8h676lwzuqjf95xmfa3tpeaz5s4sw",
+  "configurationChanged": false,
+  "walletOwnershipChecked": false,
+  "productionSignerIdentitiesFrozen": false
+}

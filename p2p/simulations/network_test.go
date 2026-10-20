@@ -26,7 +26,7 @@ import (
 	"github.com/TeamEGEM/go-egem/p2p/simulations/adapters"
 )
 
-// TestNetworkSimulation creates a multi-node simulation network with each node
+// Create a multi-node simulation network with each node
 // connected in a ring topology, checks that all nodes successfully handshake
 // with each other and that a snapshot fully represents the desired topology
 func TestNetworkSimulation(t *testing.T) {

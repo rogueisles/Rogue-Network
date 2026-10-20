@@ -2,7 +2,7 @@ package progpow
 
 import (
 	"encoding/binary"
-        "math/bits"
+	"math/bits"
 )
 
 // ----------------------------------------------------------------------------
@@ -245,15 +245,13 @@ func buildProgram(rng *kiss99State) progpowProg {
 		p.cacheSel[i] = rng.next()
 	}
 	p.dagSrc = rng.next() % progpowLanes
-
-return p
+	return p
 }
 
 // seedRNG initialises a KISS99 RNG from the block-period number (progSeed).
 // Matches ifdefelse/ProgPOW::getKern(uint64_t prog_seed). The C++ fnv1a takes
 // its first arg by reference (uint32_t &h) and mutates it, so each call feeds
 // the previous return value — Go must thread it through explicitly.
-
 func seedRNG(progSeed uint64) kiss99State {
         seed0 := uint32(progSeed)
         seed1 := uint32(progSeed >> 32)
@@ -415,7 +413,8 @@ func progpowLoop(
 }
 
 // BuildL1Cache fills a progpowCacheWords-element []uint32 from the seed hash.
-// This is the L1 cache that ProgPoW uses for fast random reads during mining.
+// This is the L1 cache that ProgPoW uses for fast random reads during mining
+
 func BuildL1Cache(dag []uint32) []uint32 {
     cache := make([]uint32, progpowCacheWords)
     for i := range cache {

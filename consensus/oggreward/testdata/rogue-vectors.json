@@ -1,0 +1,94 @@
+{
+  "scope": "Independent Python Fraction for short offsets; agreeing Decimal 130/220 precision for the decline; exact integer allowance arithmetic for the capped tail. Prefix independently certified at every offset in Go and Python.",
+  "numerator": "999999807871237324305429716870248633",
+  "denominator": "1000000000000000000000000000000000000",
+  "preTailIssuedWei": "5204842797281179394669193552",
+  "tailStartOffset": 12480667,
+  "tailRewardWei": "100000000000000000000",
+  "vectors": [
+    {
+      "offset": 0,
+      "rewardWei": "1100000000000000000000"
+    },
+    {
+      "offset": 1,
+      "rewardWei": "1099999788658361056735"
+    },
+    {
+      "offset": 2,
+      "rewardWei": "1099999577316762718279"
+    },
+    {
+      "offset": 9,
+      "rewardWei": "1099998097926711283041"
+    },
+    {
+      "offset": 10,
+      "rewardWei": "1099997886585437782765"
+    },
+    {
+      "offset": 11,
+      "rewardWei": "1099997675244204887226"
+    },
+    {
+      "offset": 219149,
+      "rewardWei": "1054646194003656659890"
+    },
+    {
+      "offset": 219150,
+      "rewardWei": "1054645991375788345337"
+    },
+    {
+      "offset": 219151,
+      "rewardWei": "1054645788747958961426"
+    },
+    {
+      "offset": 5259600,
+      "rewardWei": "400432383299619940868"
+    },
+    {
+      "offset": 7889400,
+      "rewardWei": "241600286745456110448"
+    },
+    {
+      "offset": 12480666,
+      "rewardWei": "100000012649744717650"
+    },
+    {
+      "offset": 12480667,
+      "rewardWei": "100000000000000000000"
+    },
+    {
+      "offset": 12480668,
+      "rewardWei": "100000000000000000000"
+    },
+    {
+      "offset": 26298000,
+      "rewardWei": "100000000000000000000"
+    },
+    {
+      "offset": 31998826,
+      "rewardWei": "100000000000000000000"
+    },
+    {
+      "offset": 31998827,
+      "rewardWei": "2010331721973212466"
+    },
+    {
+      "offset": 31998828,
+      "rewardWei": "0"
+    },
+    {
+      "offset": 100000000,
+      "rewardWei": "0"
+    },
+    {
+      "offset": 300000000,
+      "rewardWei": "0"
+    },
+    {
+      "offset": 400000000,
+      "rewardWei": "0"
+    }
+  ]
+}

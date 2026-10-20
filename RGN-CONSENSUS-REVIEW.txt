@@ -1,0 +1,100 @@
+CONSENSUS / SECURITY REVIEW -- RGN MAINNET SOURCE CANDIDATE
+20 October 2026
+
+Review scope
+Review of candidate changes against the actual original mainnet source and
+retained D14 source, supplemented by targeted and broader executable checks.
+This is an engineering qualification by the implementing assistant, not an
+independent external security audit or a proof that no vulnerabilities exist.
+
+Resolved finding: active-config auto-rewind
+The inherited Ethereum startup accepts a bare ConfigCompatError, rewinds to its
+suggested height, and writes the replacement configuration. The initial RGN
+configuration tests checked rejection inside SetupGenesisBlock but did not
+account for that caller behavior. A new regression failed on the old behavior.
+SetupGenesisBlock now returns a wrapped terminal error when a configuration
+conflicts with an already active RGN schedule (or installs a mismatched active
+RGN schedule over imported history). Full/light-node callers stop instead of
+automatically rewinding. Tests cover removal, proof-parameter mutation, moved
+activation, changed historical rules, unchanged stored config and head, and
+ordinary nil-genesis restart. Pre-H and non-RGN handling are preserved.
+
+Historical invariants
+The exact original mainnet genesis and old EVM rules remain. The candidate's
+ProgPoW kernel and old difficulty eras preserve the D14 compatibility path.
+The legacy reward optimization returns an integer only when independently
+rounded lower/upper bounds certify it; exact rational fallback is retained.
+All historical reward heights through H-1 are summed to the frozen gross
+issuance snapshot, including genesis and the old Tribe seed.
+Full historical block/state/receipt/seal replay is reported separately with a
+fixed independently cross-checked checkpoint. The future unknown gap between
+that checkpoint and H is not represented as existing historical evidence.
+
+Reward invariants
+Normal rewards, special treasury credits and inherited fees are distinct.
+The approved v2 schedule uses option B Q36 decay until its curve reaches
+100 RGN, then pays a finite 100 RGN tail with one final partial reward. Two
+independent exhaustive interval recurrences certify the exact floored prefix;
+that prefix plus all tail rewards equals the normal allowance exactly. The
+height-only subtraction cannot reopen an allowance after spending or burning.
+The split conserves every wei with dust to the miner. Special issuance depends
+only on canonical height, with no mutable paid flag, wall clock or cron task.
+The persisted-chain rehearsals cover canonical replacement and reapplication
+of the initial credit, restart, every monthly boundary and absent 37th release,
+plus tail onset, final partial reward and zero subsidy after cap exhaustion.
+The pool consumes only the node's canonical miner-reward field and preserves
+the installed variable-difficulty accounting behavior.
+
+Proof invariants
+The Hybrid engine selects the old/new rules at the exact inclusive height.
+Mixed batches use already-verified header overlays across the boundary.
+Mainnet rejects private CPU target scaling, old/missing proofs and disabled
+external participation. RGN permits DGB-only, DOGE-only or both; zero-anchor or
+bonus-only work cannot satisfy the profile. V3 binds the signed external body
+to the exact RGN work hash; native body/branch, treasury scripts, auxiliary
+identities, canonical Merkle tree and signer quorum are checked. Envelope and
+branch sizes are bounded. Canonical Scrypt work is checked separately from
+the attested native-template bindings.
+
+Remaining review/qualification limits
+- The four peer nodes verify signed external-template attestations; they do
+  not independently prove native-chain liveness by querying DGB/DOGE in the
+  consensus path. Signer custody, independent native validation and quorum
+  availability are real production trust assumptions. One signer is a single
+  attestation availability/trust point. Its final mainnet policy is not frozen.
+- RetargetV2 is a custom relative exponential rule carried from D14. It is not
+  BCH ASERT consensus. Boundary, overflow, direction, timestamp and independent
+  exponential-reference tests help qualification; independent review remains.
+- The inherited total-difficulty fork choice crosses different historical and
+  future proof domains. No new checkpoint or chainwork conversion has been
+  silently introduced. Deep reorganisation economics near a proof-algorithm
+  change deserve explicit independent review before production activation.
+- Persisted boundary rehearsals deliberately skip seals in a TEST-ONLY engine
+  wrapper. They validate headers/difficulty/body/EVM/receipts/state/reorg/restart,
+  not a newly mined canonical-target RGN activation proof. Native private-lab
+  proof matrices validate bindings at private difficulty and are labelled so.
+- The previous v1 isolated real-miner sample passed canonical-target sealing
+  and state execution from a trusted synthetic H-1 through H+11. Its unchanged
+  first-H block was rechecked byte for byte under v2, with all 12 invalid proof
+  variants rejected, full state import and restart. Later v1 reward roots are
+  not evidence of the changed v2 curve. Current v2 persisted state/tail/cap
+  tests passed. Production signer identities remain unfrozen; the local
+  signers share native backends.
+- The earlier sparse-checkpoint pruning crash left four uncertain OGG sends.
+  Archive mode corrects that experiment's storage setup. The exact four proofs
+  were reconstructed and fully imported. A copy of the actual saved six-record
+  journal, node database and Redis on PRIMARY passed positive reconciliation,
+  ordered replay and restarts without duplicate share credit or candidates.
+  Original data and existing services stayed unchanged. This is fixture-specific
+  accounting recovery, not a general missing-candidate-body recovery service.
+  Production review should address durable retention/recovery of complete issued
+  candidates and distinguish RPC acknowledgement from completed block storage.
+- Broader core/consensus/eth/miner tests do not imply every inherited subsystem
+  or every third-party dependency has a clean independent security audit.
+- Existing staking/Tribe bytecode and storage are preserved. These preservation
+  checks do not independently audit contract-specific yield/claim formulas or
+  their long-term funding assumptions under the new staking allocation.
+
+No live mainnet consensus, source checkout, executable, account, wallet or
+service was replaced during this qualification. Original-binary reproductions
+used isolated artifact folders; the original source/deployed hashes stayed fixed.

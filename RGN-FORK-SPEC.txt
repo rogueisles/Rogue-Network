@@ -1,0 +1,115 @@
+ROGUE NETWORK / RGN -- SOURCE SPECIFICATION, ECONOMIC PROFILE V2
+
+IDENTITY AND ACTIVATION
+Chain/network ID 70088; native currency RGN, 18 decimals. Existing OGG units
+are preserved one for one. Genesis remains
+dc4d38c0ef41d3fdf50642fdf5fc99e221eadd09e73bbe616724f55a136270ab.
+The explicit rewardSchedule is rgn-mainnet-v2, ForgeBlock 1100100 inclusive.
+Before that height, historical ProgPoW, reward, EVM and account rules apply.
+Afterward, the reviewed Scrypt proof rules and the economic schedule below apply.
+The superseded rgn-mainnet-v1 economic profile is rejected. No four-node live
+configuration has been changed; an empty schedule retains the existing legacy
+profile. The original genesis.json, wire domains and accounting keys are retained.
+
+EXACT NORMAL ISSUANCE -- INTEGER WEI
+Lifetime gross cap:   10700000000000000000000000000
+Historical issuance:  1443341200708488883357593982
+Special allowance:    2100000000000000000000000000
+Normal allowance:     7156658799291511116642406018
+Initial reward R0:        1100000000000000000000
+Decay numerator:       999999807871237324305429716870248633
+Decay denominator:     1000000000000000000000000000000000000
+Tail reward:              100000000000000000000
+
+Let n = height - 1100100. For 0 <= n < 12480667:
+  reward(n) = floor(R0 * (numerator / denominator)^n).
+The exact sum of these individually floored rewards is
+  5204842797281179394669193552 wei.
+The preceding reward is 100000012649744717650 wei. At n=12480667 the
+underlying curve would be 99999993436866019700 wei; the 100 RGN tail begins
+there instead, at height 13580767. There is no upward reward jump.
+
+For n >= 12480667:
+  remaining = normalAllowance - exactPrefix - (n-12480667)*100*10^18;
+  reward(n) = max(0, min(100*10^18, remaining)).
+There are 19518160 full 100 RGN tail blocks. The last partial reward is
+2010331721973212466 wei (2.010331721973212466 RGN), at height 33098927.
+Subsidy is zero from height 33098928. Existing transaction fee handling remains.
+Historical issuance + all special credits + all normal rewards equals exactly
+10.7 billion RGN. Spending or burning coins never reopens an issuance allowance.
+All calculations depend only on canonical height, not wallet balances, wall time,
+mutable counters or process history. Reorganisation and restart retain this rule.
+
+The 512-bit fast path returns a reward only when outward-rounded bounds certify
+the same integer wei; otherwise exact rational arithmetic is used. The complete
+declining prefix is certified by independent Go/Python interval calculations and
+an exhaustive regression. The portable cmd/rogue-emission-check tool repeats the
+prefix calculation without a chain database or network access. Its 16-byte
+big-endian per-reward sequence hash is
+682939cf440811061341524ab7cdb092d705a1fd11e62ce71c838031156b7171.
+
+NORMAL REWARD ROUTING
+Mining 40%, existing staking 30%, P2E 20%, treasury 10%.
+Staking/P2E/treasury amounts floor to wei; miner receives the exact remainder.
+At 1100 RGN: mining 440, staking 330, P2E 220, treasury 110, plus inherited fees.
+At 100 RGN: mining 40, staking 30, P2E 20, treasury 10, plus inherited fees.
+Staking:  0xa47008c59f729756bEc7d01f6FE71328A242d0c4
+P2E:      0x03D50e192Bd14ec9f536DF00Db7Ae6723Bdb8BcD
+Treasury: 0x85ea896411EdFE9dD7fa6F4F5FaA19D2D81cdA5E
+Future Tribe funding stops at activation. Existing Tribe/staking balances,
+bytecode, storage and claims are not migrated or reset. The final partial reward
+uses the same split with integer rounding; it does not create a full 100 RGN.
+
+SPECIAL TREASURY ISSUANCE
+Newly issue 300000000 RGN at height 1100110, once on the canonical chain.
+Newly issue 50000000 RGN at 1100100+j*219150 for j=1..36.
+First monthly release: 1319250; 24th: 6359700; final: 8989500; no 37th release.
+The ten-block initial delay does not shift the monthly release heights.
+These are deterministic native state credits at finalization, separate from
+the normal reward and its split. There is no upfront reserve, cron task or paid
+flag. Ordinary state-root validation, rollback and replay govern each credit.
+
+PROOF AND CONFIGURATION RULES
+Canonical Scrypt only after activation; private CPU target scaling is rejected.
+V3 multi proofs must include DGB, DOGE or both. Litecoin/other anchors are not
+enabled in this release. Missing/old proofs, zero/disabled participation, altered
+bindings, insufficient or duplicate quorum signatures and invalid work reject.
+The template signatures attest native proposal bindings; they do not replace
+proof-of-work validation or prove native liveness independently at every peer.
+RetargetV2 remains unchanged, with configured target 12 seconds. The user accepts
+the recorded timing; no new timing tuning or exact 12-second claim is made.
+Production public signer identities, independently validating services, quorum
+and difficulty still require a configuration freeze before deployment. Local
+ephemeral signer keys are not production identities. An ordinary restart retains
+the explicitly installed configuration; incompatible active changes fail startup.
+
+APPROVED NATIVE DESTINATIONS
+DGB: dgb1qwp3x0ff9tcmxdymtewd8wan8tx0nsa2xph32yc
+Script SHA256: 61a5c2ea83616bd160c97438eea42824ae63f7d3359e893d8b0d777d049b059d
+DOGE: DBz6RAy6g8381EbR1KAepmTwAEG9GxY6Fz
+Script SHA256: 68907fbe8d80920192e8a8fc611dd4f10fcf0ac29ea09a6856ed59a46da4afb7
+The inherited ltcPayoutScriptHash field binds the DigiByte parent destination in
+this release. It does not enable Litecoin. RGN treasury credits are separate
+native assets and use the RGN treasury address above.
+
+RPC AND POOL
+Existing eth_getBlockReward and minerReward fields remain. Total is normal
+subsidy only; specialIssuance is additional treasury issuance. New fields include
+p2e, treasury and currencySymbol. Tribe/Maintenance are zero under the new split.
+The pool consumes canonical miner subsidy plus its existing transaction fee
+policy, excluding special issuance. Normal rewards become zero after exhaustion;
+transaction fees remain eligible under that same policy.
+For adoption, pool forgeBlock is 1100100 and both pool/signers explicitly use
+externalChainPolicy="dgb-doge". Internal OGG Redis/round identifiers remain.
+
+QUALIFICATION SCOPE
+Use the accompanying qualification report for exact source hashes and test scope.
+The previous v1 real-miner H..H+11 sample is retained as evidence of the unchanged
+proof path, not as verification of v2 rewards after H. Its first H block has the
+same 1100 reward and can be revalidated byte for byte under v2. Current v2 state
+tests cover activation, all special credits, tail onset, cap exhaustion, reorgs
+and restarts. The full historical replay covers unchanged historical validation;
+it is not unknown future history or a new full v2 miner-backed sample.
+Source may be uploaded by the user for review. Deployment still needs frozen
+production settings, broader consensus/security review and a fresh height/config
+preflight. No Docker build, source publication or live upgrade is performed here.

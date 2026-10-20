@@ -35,6 +35,7 @@ import (
 	"github.com/TeamEGEM/go-egem/consensus"
 	"github.com/TeamEGEM/go-egem/consensus/clique"
 	"github.com/TeamEGEM/go-egem/consensus/ethash"
+	"github.com/TeamEGEM/go-egem/consensus/forge"
 	"github.com/TeamEGEM/go-egem/consensus/progpow"
 	"github.com/TeamEGEM/go-egem/core"
 	"github.com/TeamEGEM/go-egem/core/state"
@@ -536,8 +537,8 @@ var (
 )
 
 // MakeDataDir retrieves the currently requested data directory, terminating
-// if none (or the empty string) is specified. If the node is starting a testnet,
-// the a subdirectory of the specified datadir will be used.
+// if none (or the empty string) is specified. A separate network uses
+// a subdirectory of the specified data directory.
 func MakeDataDir(ctx *cli.Context) string {
 	if path := ctx.GlobalString(DataDirFlag.Name); path != "" {
 		if ctx.GlobalBool(TestnetFlag.Name) {
@@ -1255,10 +1256,11 @@ func MakeChain(ctx *cli.Context, stack *node.Node) (chain *core.BlockChain, chai
 	if config.Clique != nil {
 		engine = clique.New(config.Clique, chainDb)
 	} else if config.ProgPoW != nil {
+		var legacy consensus.Engine
 		if ctx.GlobalBool(FakePoWFlag.Name) {
-			engine = progpow.NewFaker()
+			legacy = progpow.NewFaker()
 		} else {
-			engine = progpow.New(progpow.Config{
+			legacy = progpow.New(progpow.Config{
 				CacheDir:       stack.ResolvePath(eth.DefaultConfig.ProgPoW.CacheDir),
 				CachesInMem:    eth.DefaultConfig.ProgPoW.CachesInMem,
 				CachesOnDisk:   eth.DefaultConfig.ProgPoW.CachesOnDisk,
@@ -1266,6 +1268,14 @@ func MakeChain(ctx *cli.Context, stack *node.Node) (chain *core.BlockChain, chai
 				DatasetsInMem:  eth.DefaultConfig.ProgPoW.DatasetsInMem,
 				DatasetsOnDisk: eth.DefaultConfig.ProgPoW.DatasetsOnDisk,
 			})
+		}
+		engine = legacy
+		if config.ForgeBlock != nil && config.Forge != nil {
+			hybrid, ferr := forge.NewHybrid(config, legacy)
+			if ferr != nil {
+				Fatalf("Invalid FORGE consensus configuration: %v", ferr)
+			}
+			engine = hybrid
 		}
 	} else {
 		engine = ethash.NewFaker()

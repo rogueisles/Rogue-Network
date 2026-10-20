@@ -88,7 +88,7 @@ func TestDAOForkBlockNewChain(t *testing.T) {
 		expectBlock *big.Int
 		expectVote  bool
 	}{
-		// Test DAO Default Mainnet
+		// Verify the default DAO activation settings.
 		{"", params.MainnetChainConfig.DAOForkBlock, true},
 		// test DAO Init Old Privnet
 		{daoOldGenesis, nil, false},

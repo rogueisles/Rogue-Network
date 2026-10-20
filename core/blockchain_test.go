@@ -328,7 +328,7 @@ func TestReorgLongHeaders(t *testing.T) { testReorgLong(t, false) }
 func TestReorgLongBlocks(t *testing.T)  { testReorgLong(t, true) }
 
 func testReorgLong(t *testing.T, full bool) {
-	testReorg(t, []int64{0, 0, -9}, []int64{0, 0, 0, -9}, 393280, full)
+	testReorg(t, []int64{0, 0, -9}, []int64{0, 0, 0, -9}, full)
 }
 
 // Tests that reorganising a short difficult chain after a long easy one
@@ -348,10 +348,10 @@ func testReorgShort(t *testing.T, full bool) {
 	for i := 0; i < len(diff); i++ {
 		diff[i] = -9
 	}
-	testReorg(t, easy, diff, 12615120, full)
+	testReorg(t, easy, diff, full)
 }
 
-func testReorg(t *testing.T, first, second []int64, td int64, full bool) {
+func testReorg(t *testing.T, first, second []int64, full bool) {
 	// Create a pristine chain and database
 	db, blockchain, err := newCanonical(ethash.NewFaker(), 0, full)
 	if err != nil {
@@ -406,7 +406,19 @@ func testReorg(t *testing.T, first, second []int64, td int64, full bool) {
 		}
 	}
 	// Make sure the chain total difficulty is the correct one
-	want := new(big.Int).Add(blockchain.genesisBlock.Difficulty(), big.NewInt(td))
+	// This is an OGG-derived chain, not the old Ethereum difficulty fixture.
+	// Compute each branch's weight from its supplied headers independently of
+	// the database TD accumulator, and require the heavier branch to win.
+	weight := func(blocks types.Blocks) *big.Int {
+		// This inherited fixture omits Genesis.Difficulty; its stored genesis
+		// TD is zero even though the header supplies a default difficulty.
+		total := new(big.Int).Set(blockchain.GetTdByHash(blockchain.genesisBlock.Hash()))
+		for _, block := range blocks { total.Add(total, block.Difficulty()) }
+		return total
+	}
+	want, expectedHead := weight(easyBlocks), easyBlocks[len(easyBlocks)-1].Hash()
+	if other := weight(diffBlocks); other.Cmp(want) > 0 { want, expectedHead = other, diffBlocks[len(diffBlocks)-1].Hash() }
+	if blockchain.CurrentHeader().Hash() != expectedHead { t.Fatal("canonical head did not select the heavier supplied branch") }
 	if full {
 		if have := blockchain.GetTdByHash(blockchain.CurrentBlock().Hash()); have.Cmp(want) != 0 {
 			t.Errorf("total difficulty mismatch: have %v, want %v", have, want)

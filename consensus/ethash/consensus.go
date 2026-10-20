@@ -28,6 +28,7 @@ import (
 	"github.com/TeamEGEM/go-egem/common/math"
 	"github.com/TeamEGEM/go-egem/consensus"
 	"github.com/TeamEGEM/go-egem/consensus/misc"
+	"github.com/TeamEGEM/go-egem/consensus/oggreward"
 	"github.com/TeamEGEM/go-egem/core/state"
 	"github.com/TeamEGEM/go-egem/core/types"
 	"github.com/TeamEGEM/go-egem/params"
@@ -38,29 +39,9 @@ import (
 var (
 	maxUncles                       = 2                 // Maximum number of uncles allowed in a single block
 	allowedFutureBlockTime          = 15 * time.Second  // Max time from current time allowed for blocks, before they're considered future blocks
-	FrontierBlockReward    					*big.Int = big.NewInt(5e+18) // Not used will be removed in furture EGEM update.
-	ByzantiumBlockReward   					*big.Int = big.NewInt(3e+18) // Not used will be removed in furture EGEM update.
+	FrontierBlockReward    *big.Int = big.NewInt(5e+18) // Not used will be removed in furture EGEM update.
+	ByzantiumBlockReward   *big.Int = big.NewInt(3e+18) // Not used will be removed in furture EGEM update.
 )
-
-// OGG Chain — Reward Variables
-// S3 Enhanced emission: 700 OGG start, decay 0.999999933042/block
-// Split: 45% miner, 40% staking, 7% tribe pool, 8% maintenance
-var (
-	// Initial block reward: 700 OGG in wei (700 * 10^18)
-	oggInitialReward, _   = new(big.Int).SetString("700000000000000000000", 10)
-
-	// Decay factor: 0.999999933042 = 999999933042 / 1000000000000
-	// Integer arithmetic only — no floats in consensus code
-	oggDecayNumerator     = big.NewInt(999999933042)
-	oggDecayDenominator   = big.NewInt(1000000000000)
-
-	// OGG reward split addresses — hardcoded at chain launch, never change
-	// Miner (45%) goes to header.Coinbase — dynamic, whoever mined the block
-	oggStakingAddress     = common.HexToAddress("0xCd442d7AC675D6c637a960e10913e341508C6672") // OGGStaking contract — 40% of every block reward
-	oggTribePoolAddress   = common.HexToAddress("0xfeaD066Caa900F210B19B9df14aBc38B46a15e66") // OGGTribePool contract — 7% of every block reward
-	oggMaintenanceAddress = common.HexToAddress("0x85ea896411EdFE9dD7fa6F4F5FaA19D2D81cdA5E") // Maintenance wallet — 8% of every block reward
-)
-
 
 // Various error messages to mark blocks invalid. These should be private to
 // prevent engine specific errors from being referenced in the remainder of the
@@ -328,106 +309,41 @@ func CalcDifficulty(config *params.ChainConfig, time uint64, parent *types.Heade
 
 // Some weird constants to avoid constant memory allocs for them.
 var (
-	big1  = big.NewInt(1)
-	big2  = big.NewInt(2)
-	big3  = big.NewInt(10)
-	big7  = big.NewInt(7)
-	big12 = big.NewInt(10) // OGG: faster up-adjustment for 13s target
+	big1 = big.NewInt(1)
+	big2 = big.NewInt(2)
+	big3 = big.NewInt(3)
+	big7 = big.NewInt(7)
 )
 
-// oggEmergencyThreshold - emergency -50% only fires above this difficulty.
-// Below it, normal -33% handles recovery. Prevents death spiral on repeated stalls.
-var oggEmergencyThreshold = big.NewInt(1000001)
-
-// OGG Difficulty Algorithm (ethash path)
-// Target:    ~13s per block        (DurationLimit = 13)
-// Up:        +8.3% per fast block  - slow climb, prevents spikes
-// Down:      -33.3% per slow block - fast drop, quick recovery
-// Emergency: >5 min gap + diff above 1M threshold -> instant -50%
-//            Below threshold: normal -33% takes over, no death spiral
+// EGEM Difficulty Algo
+// * +/- adjustment per block
+// including a randomizer
+//
 
 func calcDifficultyEGEM(time uint64, parent *types.Header) *big.Int {
 	diff := new(big.Int)
+	adjustUp := new(big.Int).Div(parent.Difficulty, big7)
+	adjustDown := new(big.Int).Div(parent.Difficulty, big3)
 
-	elapsed := new(big.Int).Sub(
-		new(big.Int).SetUint64(time),
-		new(big.Int).Set(parent.Time),
-	)
+	bigTime := new(big.Int)
+	bigParentTime := new(big.Int)
 
-	if parent.Number.Uint64() >= 21000 {
-		// Era 4 (blocks 21000+): +12.5% up, -20% down, target 12s, emergency -25% at 3min
-		if elapsed.Cmp(big.NewInt(180)) > 0 &&
-			parent.Difficulty.Cmp(oggEmergencyThreshold) > 0 {
-			diff.Set(new(big.Int).Sub(parent.Difficulty, new(big.Int).Div(parent.Difficulty, big.NewInt(4)))) // emergency -25%
-			if diff.Cmp(params.MinimumDifficulty) < 0 {
-				diff.Set(params.MinimumDifficulty)
-			}
-			return diff
-		}
-		adjustUp   := new(big.Int).Div(parent.Difficulty, big.NewInt(8))  // +12.5%
-		adjustDown := new(big.Int).Div(parent.Difficulty, big.NewInt(5))  // -20%
-		if elapsed.Cmp(big.NewInt(12)) < 0 {
-			diff.Add(parent.Difficulty, adjustUp)
-		} else {
-			diff.Sub(parent.Difficulty, adjustDown)
-		}
-	} else if parent.Number.Uint64() >= 4100 {
-		// Era 3 (blocks 4100-20999): +12.5% up, -14.3% down, target 12s, emergency -25% at 3min
-		if elapsed.Cmp(big.NewInt(180)) > 0 &&
-			parent.Difficulty.Cmp(oggEmergencyThreshold) > 0 {
-			diff.Set(new(big.Int).Sub(parent.Difficulty, new(big.Int).Div(parent.Difficulty, big.NewInt(4)))) // emergency -25%
-			if diff.Cmp(params.MinimumDifficulty) < 0 {
-				diff.Set(params.MinimumDifficulty)
-			}
-			return diff
-		}
-		adjustUp   := new(big.Int).Div(parent.Difficulty, big.NewInt(8))  // +12.5%
-		adjustDown := new(big.Int).Div(parent.Difficulty, big.NewInt(7))  // -14.3%
-		if elapsed.Cmp(big.NewInt(12)) < 0 {
-			diff.Add(parent.Difficulty, adjustUp)
-		} else {
-			diff.Sub(parent.Difficulty, adjustDown)
-		}
-	} else if parent.Number.Uint64() >= 115 {
-		// Era 2 (blocks 115-4099): +10% up, -10% down, target 13s, emergency -25% at 3min
-		if elapsed.Cmp(big.NewInt(180)) > 0 &&
-			parent.Difficulty.Cmp(oggEmergencyThreshold) > 0 {
-			diff.Set(new(big.Int).Sub(parent.Difficulty, new(big.Int).Div(parent.Difficulty, big.NewInt(4)))) // emergency -25%
-			if diff.Cmp(params.MinimumDifficulty) < 0 {
-				diff.Set(params.MinimumDifficulty)
-			}
-			return diff
-		}
-		adjustUp   := new(big.Int).Div(parent.Difficulty, big.NewInt(10)) // +10%
-		adjustDown := new(big.Int).Div(parent.Difficulty, big.NewInt(10)) // -10%
-		if elapsed.Cmp(big.NewInt(13)) < 0 {
-			diff.Add(parent.Difficulty, adjustUp)
-		} else {
-			diff.Sub(parent.Difficulty, adjustDown)
-		}
+	bigTime.SetUint64(time)
+	bigParentTime.Set(parent.Time)
+
+	if bigTime.Sub(bigTime, bigParentTime).Cmp(params.DurationLimit) < 0 {
+		diff.Add(parent.Difficulty, big7)
+		diff.Add(diff, adjustUp)
 	} else {
-		// Era 1 (blocks 0-114): original algo, emergency -50% at 5min
-		if elapsed.Cmp(big.NewInt(300)) > 0 &&
-			parent.Difficulty.Cmp(oggEmergencyThreshold) > 0 {
-			diff.Rsh(parent.Difficulty, 1) // -50%
-			if diff.Cmp(params.MinimumDifficulty) < 0 {
-				diff.Set(params.MinimumDifficulty)
-			}
-			return diff
-		}
-		adjustUp   := new(big.Int).Div(parent.Difficulty, big12) // +8.3%
-		adjustDown := new(big.Int).Div(parent.Difficulty, big3)  // -33.3%
-		if elapsed.Cmp(params.DurationLimit) < 0 {
-			diff.Add(parent.Difficulty, adjustUp)
-		} else {
-			diff.Sub(parent.Difficulty, adjustDown)
-		}
+		diff.Sub(parent.Difficulty, big3)
+		diff.Sub(diff, adjustDown)
 	}
 
 	if diff.Cmp(params.MinimumDifficulty) < 0 {
 		diff.Set(params.MinimumDifficulty)
 	}
 
+	//fmt.Println("Next Block Difficulty: ", diff)
 	return diff
 }
 
@@ -463,23 +379,22 @@ func (ethash *Ethash) VerifySeal(chain consensus.ChainReader, header *types.Head
 	// until after the call to hashimotoLight so it's not unmapped while being used.
 	runtime.KeepAlive(cache)
 
-	        if !bytes.Equal(header.MixDigest[:], digest) {
-                fmt.Printf("ETHASH DEBUG invalid mix number=%d nonce=%d haveMix=%x wantMix=%x result=%x\n",
-                        header.Number.Uint64(),
-                        header.Nonce.Uint64(),
-                        header.MixDigest[:],
-                        digest,
-                        result,
-                )
-                return errInvalidMixDigest
-        }
- target := new(big.Int).Div(maxUint256, header.Difficulty)
-        if new(big.Int).SetBytes(result).Cmp(target) > 0 {
-                return errInvalidPoW
-        }
-        return nil
+	if !bytes.Equal(header.MixDigest[:], digest) {
+		fmt.Printf("ETHASH DEBUG invalid mix number=%d nonce=%d haveMix=%x wantMix=%x result=%x\n",
+			header.Number.Uint64(),
+			header.Nonce.Uint64(),
+			header.MixDigest[:],
+			digest,
+			result,
+		)
+		return errInvalidMixDigest
+	}
+	target := new(big.Int).Div(maxUint256, header.Difficulty)
+	if new(big.Int).SetBytes(result).Cmp(target) > 0 {
+		return errInvalidPoW
+	}
+	return nil
 }
-
 
 // Prepare implements consensus.Engine, initializing the difficulty field of a
 // header to conform to the ethash protocol. The changes are done inline.
@@ -496,7 +411,7 @@ func (ethash *Ethash) Prepare(chain consensus.ChainReader, header *types.Header)
 // setting the final state and assembling the block.
 func (ethash *Ethash) Finalize(chain consensus.ChainReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header, receipts []*types.Receipt) (*types.Block, error) {
 	// OGG: single reward function from genesis — no legacy switch needed
-	accumulateRewardsOGG(chain.Config(), state, header, uncles)
+	oggreward.AccumulateRewards(chain.Config(), state, header)
 	header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
 	return types.NewBlock(header, txs, uncles, receipts), nil
 }
@@ -506,93 +421,3 @@ var (
 	big8  = big.NewInt(8)
 	big32 = big.NewInt(32)
 )
-
-// computeBlockReward calculates the OGG block reward at block number n.
-// Formula: reward(n) = initialReward * (decayNumerator / decayDenominator)^n
-//
-// Uses pure integer arithmetic — no float64 anywhere in consensus code.
-//
-// IMPORTANT: This naive loop runs in O(n) time. At block 1,000,000 it does
-// 1 million multiplications. For production consider replacing with binary
-// exponentiation (O(log n)) or a lookup table at block milestones.
-// For the first year (~2.6M blocks) this will become slow — upgrade before launch.
-func computeBlockReward(blockNum *big.Int) *big.Int {
-	reward := new(big.Int).Set(oggInitialReward)
-	n := blockNum.Int64()
-
-	if n == 0 {
-		return reward
-	}
-
-	// Compute decay^n using binary exponentiation — O(log n) multiplications
-	// reward = initialReward * numerator^n / denominator^n
-	numPow := new(big.Int).SetInt64(1)
-	denPow := new(big.Int).SetInt64(1)
-	base := n
-
-	numBase := new(big.Int).Set(oggDecayNumerator)
-	denBase := new(big.Int).Set(oggDecayDenominator)
-
-	for base > 0 {
-		if base%2 == 1 {
-			numPow.Mul(numPow, numBase)
-			denPow.Mul(denPow, denBase)
-		}
-		numBase.Mul(numBase, numBase)
-		denBase.Mul(denBase, denBase)
-		base /= 2
-	}
-
-	reward.Mul(reward, numPow)
-	reward.Div(reward, denPow)
-	return reward
-}
-
-// accumulateRewardsOGG distributes the OGG block reward to four recipients.
-//
-// Split per block:
-//   45% → Miner (header.Coinbase — whoever mined this block)
-//   40% → OGGStaking contract (oggStakingAddress)
-//    7% → OGGTribePool contract (oggTribePoolAddress)
-//    8% → Maintenance wallet (oggMaintenanceAddress)
-//
-// The miner receives the remainder after the three fixed splits are subtracted.
-// This means the miner absorbs any rounding dust from integer division.
-//
-// Uncle rewards are NOT included — OGG uses no uncle rewards.
-// The original EGEM uncle reward logic has been intentionally removed.
-func accumulateRewardsOGG(config *params.ChainConfig, state *state.StateDB, header *types.Header, uncles []*types.Header) {
-	// Calculate total block reward at this block number using S3 Enhanced formula
-	totalReward := computeBlockReward(header.Number)
-
-	// Calculate the three fixed shares (integer division)
-	stakingReward := new(big.Int).Mul(totalReward, big.NewInt(40))
-	stakingReward.Div(stakingReward, big.NewInt(100))
-
-	tribeReward := new(big.Int).Mul(totalReward, big.NewInt(7))
-	tribeReward.Div(tribeReward, big.NewInt(100))
-
-	maintenanceReward := new(big.Int).Mul(totalReward, big.NewInt(8))
-	maintenanceReward.Div(maintenanceReward, big.NewInt(100))
-
-	// Miner gets the remainder — absorbs rounding dust, always equals 45% + dust
-	minerReward := new(big.Int).Set(totalReward)
-	minerReward.Sub(minerReward, stakingReward)
-	minerReward.Sub(minerReward, tribeReward)
-	minerReward.Sub(minerReward, maintenanceReward)
-
-	// Distribute to all four recipients
-	// Hardfork at block 21000: switch to new contract addresses
-	stakingAddr := oggStakingAddress
-	tribeAddr   := oggTribePoolAddress
-	if header.Number.Uint64() >= 21000 {
-		stakingAddr = common.HexToAddress("0xa47008c59f729756bEc7d01f6FE71328A242d0c4")
-		tribeAddr   = common.HexToAddress("0x085CF5da09842FA3BA01068CC02c156198b1b114")
-	}
-
-	state.AddBalance(header.Coinbase, minerReward)       // Miner — 45%
-	state.AddBalance(stakingAddr, stakingReward)         // OGGStaking — 40%
-	state.AddBalance(tribeAddr, tribeReward)             // OGGTribePool — 7%
-	state.AddBalance(oggMaintenanceAddress, maintenanceReward) // Maintenance — 8%
-}
-

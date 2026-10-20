@@ -1,0 +1,109 @@
+ROGUE NETWORK / RGN -- APPROVED B / 100 RGN TAIL SOURCE HANDOFF
+20 October 2026
+
+Use the archives whose names end in -b100-candidate. B100-CANDIDATE-SHA256SUMS.txt
+identifies their exact contents. All earlier source archives are superseded for
+the approved economics; they remain historical review snapshots.
+
+The user requested complete source for manual GitHub upload and comparison.
+Upload the contents of rogue-network-rgn-node to the node repository. The pool
+archive is a separate complete source tree; keep it in the pool repository.
+Preserve attribution and licenses. No binary, live database, wallet key, DAG or
+build cache is delivered. Deterministic public test keys remain test fixtures.
+The original genesis.json is unchanged. No Docker build or live update occurred.
+
+APPROVED ECONOMICS
+Chain/network 70088, native OGG renamed RGN one for one, 18 decimals.
+Inclusive activation 1100100. All earlier engine/EVM/reward/account rules remain.
+Lifetime gross issuance 10.7B, including historical supply and special credits.
+Normal allowance: 7156658799.291511116642406018 RGN.
+Start 1100 RGN; option B per-block multiplier:
+  0.999999807871237324305429716870248633
+Decline to the 100 RGN tail at height 13580767. Pay 19518160 full tail rewards,
+then 2.010331721973212466 RGN at 33098927, then zero subsidy from 33098928.
+The final partial payment consumes the exact remaining normal budget. Mining
+fees keep their existing policy. Burns/spending never reopen emission room.
+Normal split: 40% mining, 30% existing staking, 20% P2E, 10% treasury; dust to miner.
+At 1100: 440 / 330 / 220 / 110. At 100: 40 / 30 / 20 / 10 RGN, plus miner fees.
+Existing staking and Tribe balances/contracts/claims stay; future Tribe funding
+stops at activation. New P2E rewards go to the approved regular wallet.
+300M newly issued to treasury at 1100110. 50M newly issued every 219150 blocks
+for 36 releases, first 1319250, final 8989500. These are separate from the split.
+RGN treasury: 0x85ea896411EdFE9dD7fa6F4F5FaA19D2D81cdA5E
+P2E: 0x03D50e192Bd14ec9f536DF00Db7Ae6723Bdb8BcD
+Staking: 0xa47008c59f729756bEc7d01f6FE71328A242d0c4
+
+At the 12-second target, projected gross issuance is approximately 74.87% after
+three years and 82.38% after five. The tail begins after about 4.746 target years;
+all issuance finishes after about 12.168 target years. These include existing
+issuance, the 300M credit and monthly releases due. They measure gross issuance,
+not traded circulation. Actual dates depend on block timing from activation.
+RGN-FORK-SPEC.txt gives the exact integer formulas and boundary heights.
+
+CONFIGURATION AND SOURCE LINEAGE
+The immutable new economic profile is rgn-mainnet-v2. Superseded v1 is rejected;
+never reuse an existing active profile identifier for changed economics.
+The four current peer-node originals have identical captured source. Their
+running binaries were independently reproduced byte for byte in their original
+build environments. This source builds on that baseline and the reviewed FORGE
+implementation; candidate diffs are supplied with the qualification evidence.
+The candidate is expected to differ from the originals at the reviewed fork,
+reward, proof, configuration, naming, pool, comment and test changes.
+
+The original genesis file is not silently edited to schedule the fork. The
+rogue-config offline tool takes that genesis and reviewed public proof settings
+and generates explicit v2 configuration preserving the actual genesis hash,
+chain ID, allocations and historical rules. Later every node must receive the
+same reviewed configuration before activation. Keep existing databases and keys.
+Do not reset genesis or change only the JSON height. Moving activation requires
+reviewed source, historical issuance snapshot and emission calculations.
+
+After activation, only the configured canonical Scrypt proof domain is accepted;
+historical ProgPoW remains for earlier blocks. DGB-only, DOGE-only or both are
+allowed. Extra coins are not enabled. The pool and each signer must explicitly
+set externalChainPolicy="dgb-doge". Existing OGG internal wire/accounting names
+remain to preserve protocol and ledger compatibility.
+
+Approved native treasury addresses:
+DGB dgb1qwp3x0ff9tcmxdymtewd8wan8tx0nsa2xph32yc
+DOGE DBz6RAy6g8381EbR1KAepmTwAEG9GxY6Fz
+Their script hashes are in RGN-APPROVED-NATIVE-TREASURY-DESTINATIONS.json. The
+inherited ltcPayoutScriptHash setting binds DigiByte in this release, not Litecoin.
+These public destinations do not generate or prove custody of wallet keys.
+
+First-party Go comments describe behavior without AI-authoring or D14/testnet/
+mainnet labels. Functional identifiers, string values, tests, licenses and build
+directives are retained. Technical specification and test evidence are separate
+documents. The current parser audit reports the exact checked source files.
+
+QUALIFICATION AND DEPLOYMENT
+Read RGN-QUALIFICATION-REPORT.txt and RGN-SOURCE-TESTING.txt. Exact decay-prefix
+certification, cap arithmetic, tail/end reorgs, all special releases, relevant
+node suites, disposable-Redis pool race/integration tests and clean reproducible
+native builds are checked for this revision. The independent automated review
+is a scoped correctness review, not an external security audit.
+
+Completed prior operational evidence is retained with its scope: individual and
+combined source outages, accounting reconciliation, restored payments with a
+confirmed fresh payout, actual miner boundary proofs and saved-journal recovery
+on an isolated copy. The v1 miner sample does not prove changed v2 rewards after
+H. Current v2 state/reorg checks cover the new curve and finite tail.
+
+Manual source upload for review is authorized by the user. Production activation
+remains uncleared: permanent signer addresses/services, quorum/difficulty freeze,
+broader consensus/security review, and fresh four-node height/configuration
+checks still precede a coordinated upgrade. Native DOGE treasury block discovery
+is unverified and deferred by the user. No new rental or timing tuning is needed.
+
+LATER MANUAL ROLLOUT
+After those gates pass: back up all node/pool data and identities, confirm
+1100100 is still ahead, review the identical configuration and selected build,
+then upgrade the four existing peer nodes in a coordinated rolling window.
+Check canonical agreement, stored configuration and transactions after each.
+Configure the pool-side RGN peer and two native endpoints while preserving Redis,
+submission journals and payment state. DGB/DOGE keep their native daemon software
+and databases. Docker, node domain names, website and pool presentation follow
+in separately agreed stages. Do not run old consensus software after activation.
+
+Selected peers: node1 85.190.254.195; node2 85.190.242.46;
+node3 81.17.99.108; node4 158.220.82.180.
