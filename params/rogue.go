@@ -32,6 +32,18 @@ const (
 	RoguePreForgeGrossIssuedWei         = "1443341200708488883357593982"
 )
 
+// IsOptionalSOQ uses the candidate RGN height, never the wall clock.
+func (c *ChainConfig) IsForgeRegistry(num *big.Int) bool {
+	return c != nil && c.IsForge(num) && c.Forge.RegistryBlock != nil &&
+		num != nil && num.Cmp(c.Forge.RegistryBlock) >= 0
+}
+
+func (c *ChainConfig) IsOptionalSOQ(num *big.Int) bool {
+	return c.IsRogue(num) && c.Forge.OptionalSOQBlock != nil &&
+		c.Forge.OptionalSOQBlock.Cmp(big.NewInt(RogueActivationHeight)) > 0 &&
+		num != nil && num.Cmp(c.Forge.OptionalSOQBlock) >= 0
+}
+
 func (c *ChainConfig) IsRogue(num *big.Int) bool {
 	return c != nil && c.IsForge(num) && c.Forge.RewardSchedule == RogueRewardSchedule
 }
@@ -40,7 +52,8 @@ func (c *ChainConfig) IsRogue(num *big.Int) bool {
 // snapshot. Proof signers, payout commitments and difficulty still require
 // the full engine validation. Default configurations remain unchanged.
 func (c *ChainConfig) ValidateRogueSchedule() bool {
-	return c.HasRogueHistoricalRules() &&
+	return (c.Forge == nil || c.Forge.OptionalSOQBlock == nil || c.Forge.OptionalSOQBlock.Cmp(big.NewInt(RogueActivationHeight)) > 0) &&
+		c.HasRogueHistoricalRules() &&
 		c.ForgeBlock != nil && c.ForgeBlock.Cmp(big.NewInt(RogueActivationHeight)) == 0 &&
 		c.Forge != nil && c.Forge.RewardSchedule == RogueRewardSchedule &&
 		c.Forge.PreForgeGrossIssued != nil && c.Forge.PreForgeGrossIssued.String() == RoguePreForgeGrossIssuedWei &&

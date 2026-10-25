@@ -72,6 +72,7 @@ type AuxPowProofV2 struct {
 }
 
 type AuxPowProof struct {
+	Flexible           *FlexibleProof
 	Multi              *MultiProof
 	MinerExtra         []byte
 	ParentHeader       []byte
@@ -105,6 +106,10 @@ func TemplateDigest(t ExternalTemplate) common.Hash {
 
 // EncodeProof returns the bounded, versioned Header.Extra envelope.
 func EncodeProof(p *AuxPowProof) ([]byte, error) {
+	if p != nil && p.Flexible != nil {
+		return EncodeFlexibleProof(p.Flexible)
+	}
+
 	if p != nil && p.Multi != nil {
 		return EncodeMultiProof(p.Multi)
 	}
@@ -145,6 +150,19 @@ func DecodeProof(extra []byte) (*AuxPowProof, error) {
 	}
 	if len(extra) < len(proofMagic)+1 {
 		return nil, errors.New("truncated forge proof envelope")
+	}
+	if extra[len(proofMagic)] == 5 {
+		var p FlexibleProof
+		if err := rlp.DecodeBytes(extra[len(proofMagic)+1:], &p); err != nil {
+			return nil, err
+		}
+		if p.Multi.Template.Version != 5 || len(p.Multi.MinerExtra) > MaxMinerExtra {
+			return nil, errors.New("invalid V5 envelope")
+		}
+		m := &p.Multi
+		return &AuxPowProof{Flexible: &p, Multi: m, MinerExtra: m.MinerExtra, ParentHeader: m.ParentHeader,
+			ParentCoinbase: m.ParentCoinbase, ParentMerkleBranch: m.ParentMerkleBranch,
+			Template: ExternalTemplate{ValidFrom: m.Template.ValidFrom, Expires: m.Template.Expires}}, nil
 	}
 	if extra[len(proofMagic)] == 3 || extra[len(proofMagic)] == 4 {
 		var m MultiProof
@@ -209,6 +227,9 @@ func validateConfig(c *params.ForgeConfig) error {
 		return errors.New("unknown FORGE reward schedule")
 	}
 	rogue := c.RewardSchedule == params.RogueRewardSchedule
+	if c.OptionalSOQBlock != nil && (!rogue || c.OptionalSOQBlock.Cmp(big.NewInt(params.RogueActivationHeight)) <= 0 || !c.RequireDGBOrDOGE || !c.RequireMulti || !c.AllowAuxTree) {
+		return errors.New("optional SOQ requires a future RGN fork and preserved DGB/DOGE anchors")
+	}
 	if rogue && (c.PepecoinPayoutScriptHash != (common.Hash{}) || c.DingocoinPayoutScriptHash != (common.Hash{}) || c.BellscoinPayoutScriptHash != (common.Hash{})) {
 		return errors.New("RGN mainnet enables only DGB and DOGE external chains")
 	}

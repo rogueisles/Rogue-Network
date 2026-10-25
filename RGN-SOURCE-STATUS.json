@@ -1,18 +1,13 @@
 {
-  "snapshotDate": "2026-10-20",
-  "component": "node",
-  "profile": "rgn-mainnet-v3",
-  "proofProtocol": 4,
-  "sourceReviewAndIsolatedBuildsAllowed": true,
-  "liveUpgradeReady": false,
-  "productionConfigurationIncluded": false,
-  "dockerImagesIncluded": false,
-  "existingChainDataIncludedOrReset": false,
-  "compiledInputCountVerified": 1735,
-  "remainingGates": [
-    "Successful canonical-target V4 block sealing/import across activation with real miner and owned native proposal validation. Earlier V3 miner rehearsal does not prove V4.",
-    "Permanent production signer identities/services, independent native data access and common quorum/difficulty/validity settings remain unfrozen.",
-    "Confirm the active explorer route and integrate height-aware RPC rewards, indexing, supply/APR and frontend labels before website rollout.",
-    "Refresh backups, four-node head/configuration/build agreement and activation-height lead before coordinated upgrades."
-  ]
+  "version": "4.1.0",
+  "protocol": "FORGE V5",
+  "activationHeight": 1121800,
+  "profile": "config/RGN-mainnet-v4.1.0-H1121800.json",
+  "profileSHA256": "87c66819311b112adce09855f9c2c38490fb32a193ea35ca7c466892319aefd8",
+  "historicalProofVersion": 4,
+  "proofVersionFromActivation": 5,
+  "initialUpgradeRequiresAllValidatorsAndExchanges": true,
+  "privateKeysIncluded": false,
+  "oldReleaseChecklists": "docs/history/pre-v4.0.0",
+  "qualification": "docs/RELEASE-QUALIFICATION-4.1.0.md"
 }

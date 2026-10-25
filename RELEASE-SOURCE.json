@@ -1,0 +1,39 @@
+{
+  "status": "COORDINATED_RELEASE",
+  "optionalSoqBlock": null,
+  "targetAtFutureV5Millis": 12500,
+  "publicSourceBases": {
+    "Rogue-Network": {
+      "commit": "18367e0aea25899af7fe8d608f0a19fa420740a9",
+      "date": "2026-10-20T16:39:04Z"
+    },
+    "Rogue-Node": {
+      "commit": "ffd88dbc13f8d1202e3bf9bee97c2e56732804c4",
+      "date": "2026-10-22T18:20:27Z"
+    },
+    "Mining-Pool": {
+      "commit": "f3c2cc4fe7b1bc8d3450b8363d5fe24d02e6906d",
+      "date": "2026-10-22T19:28:39Z"
+    },
+    "checkedUtc": "2026-10-25T09:30:21.8247017Z",
+    "Rogue-Docker-Node": {
+      "commit": "1bef1f08d796a81169f7e4feec07f6b8402aa0bd",
+      "date": "2026-10-22T18:14:34Z"
+    }
+  },
+  "includesProductionLatencyAndAccountingRepairs": true,
+  "initialUpgradeRequiresValidatorsAndExchanges": true,
+  "version": "4.1.0",
+  "activationHeight": 1121800,
+  "registryBlock": 1121800,
+  "profile": "config/RGN-mainnet-v4.1.0-H1121800.json",
+  "profileSHA256": "87c66819311b112adce09855f9c2c38490fb32a193ea35ca7c466892319aefd8",
+  "scheduledCanonicalConfigSHA256": "ca9afe4a8f9aab35eaaed1432ce277d133c99c6efa463cc570bedd1117935adf",
+  "registryRoot": "0xeb4a842a5a0d3243baf0fd230486486b492129abc411dad5a18cb5c647bac085",
+  "administratorQuorum": "3-of-4",
+  "privateKeysIncluded": false,
+  "initialAdministratorControl": "Operator assertion; initial possession not independently signed",
+  "releaseIdentifier": "rgn400v5",
+  "internalEngineVersionRetained": true,
+  "qualificationReport": "docs/RELEASE-QUALIFICATION-4.1.0.md"
+}

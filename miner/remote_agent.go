@@ -30,6 +30,7 @@ import (
 	"github.com/TeamEGEM/go-egem/consensus/forge"
 	"github.com/TeamEGEM/go-egem/core/types"
 	"github.com/TeamEGEM/go-egem/log"
+	"github.com/TeamEGEM/go-egem/rlp"
 )
 
 type hashrate struct {
@@ -40,6 +41,7 @@ type hashrate struct {
 // AuxWork is the FORGE work package issued to an external Scrypt merged miner.
 // Target is the integer Scrypt target for the OGG candidate.
 type AuxWork struct {
+	HeaderRLP         []byte
 	Hash              common.Hash
 	Target            *big.Int
 	Height            uint64
@@ -230,7 +232,12 @@ func (a *RemoteAgent) CreateAuxWork(minerExtra []byte) (*AuxWork, error) {
 		return nil, err
 	}
 	a.auxWork[hash] = &auxWorkItem{work: a.currentWork, block: block, createdAt: time.Now()}
+	headerRLP, err := rlp.EncodeToBytes(header)
+	if err != nil {
+		return nil, err
+	}
 	return &AuxWork{
+		HeaderRLP:         headerRLP,
 		Hash:              hash,
 		Target:            new(big.Int).Set(target),
 		Height:            header.Number.Uint64(),

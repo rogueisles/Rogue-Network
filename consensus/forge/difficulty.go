@@ -84,6 +84,18 @@ func CalcDifficulty(config *params.ChainConfig, timestamp uint64, parent *types.
 	}
 	fc := config.Forge
 	next := new(big.Int).Add(parent.Number, big.NewInt(1))
+	if config.IsForgeRegistry(next) {
+		reference := parent
+		if config.ForgeBlock != nil && next.Cmp(config.ForgeBlock) == 0 {
+			initial := *parent
+			initial.Difficulty = fc.InitialDifficulty
+			reference = &initial
+		}
+		if fc.PrivateCPUTest || !fc.RetargetV2 {
+			return calcRegistryDampedDifficulty(fc, timestamp, reference)
+		}
+		return calcRegistryRetarget(fc, timestamp, reference)
+	}
 	if config.ForgeBlock != nil && next.Cmp(config.ForgeBlock) == 0 {
 		if fc.RetargetV2 {
 			// The configured initial value is a reference at 12 seconds, not
@@ -175,6 +187,92 @@ func calcRetargetV2(c *params.ForgeConfig, timestamp uint64, parent *types.Heade
 		if actual < 12 {
 			diff.Add(diff, big.NewInt(1))
 		} else if actual > 12 {
+			diff.Sub(diff, big.NewInt(1))
+		}
+	}
+	if diff.Cmp(c.MinimumDifficulty) < 0 {
+		diff.Set(c.MinimumDifficulty)
+	}
+	// Keep a nonzero canonical Scrypt target, even at the numeric upper bound.
+	if diff.Cmp(diffOneTarget) > 0 {
+		diff.Set(diffOneTarget)
+	}
+	return diff
+}
+
+// RegistryTargetMillis is height-gated; historical headers retain the original
+// integer-second target and retarget implementation byte for byte.
+func RegistryTargetMillis(config *params.ChainConfig, number *big.Int) uint64 {
+	if config == nil || !config.IsForge(number) {
+		return 0
+	}
+	if config.IsForgeRegistry(number) {
+		return config.Forge.RegistryTargetBlockTimeMillis
+	}
+	if config != nil && config.Forge != nil {
+		return config.Forge.TargetBlockTime * 1000
+	}
+	return 0
+}
+
+func calcRegistryDampedDifficulty(c *params.ForgeConfig, timestamp uint64, parent *types.Header) *big.Int {
+	actual := uint64(1)
+	if timestamp > parent.Time.Uint64() {
+		actual = timestamp - parent.Time.Uint64()
+	}
+	if actual > 60 {
+		actual = 60
+	}
+	target := c.RegistryTargetBlockTimeMillis
+	span8 := 7*target + actual*1000
+	if span8 < 6*target {
+		span8 = 6 * target
+	}
+	if span8 > 12*target {
+		span8 = 12 * target
+	}
+	diff := new(big.Int).Mul(parent.Difficulty, new(big.Int).SetUint64(8*target))
+	diff.Div(diff, new(big.Int).SetUint64(span8))
+	if diff.Cmp(c.MinimumDifficulty) < 0 {
+		diff.Set(c.MinimumDifficulty)
+	}
+	if !c.PrivateCPUTest && diff.Cmp(diffOneTarget) > 0 {
+		diff.Set(diffOneTarget)
+	}
+	return diff
+}
+
+// The existing relative exponential algorithm and 120-second half-life are
+// retained. Only the target term becomes 12500 milliseconds after activation.
+func calcRegistryRetarget(c *params.ForgeConfig, timestamp uint64, parent *types.Header) *big.Int {
+	actual := uint64(1)
+	if timestamp > parent.Time.Uint64() {
+		actual = timestamp - parent.Time.Uint64()
+	}
+	// Avoid overflowing signed exponent arithmetic or allocating giant shifts.
+	// Past this bound the scaled parent is below one, even allowing polynomial
+	// approximation and nearest-integer rounding; the configured floor wins.
+	if actual > 13+120*uint64(parent.Difficulty.BitLen()+2) {
+		return copyBig(c.MinimumDifficulty)
+	}
+	exponent := (int64(c.RegistryTargetBlockTimeMillis) - int64(actual)*1000) * 65536 / 120000 // Go truncates toward zero.
+	shifts := exponent >> 16                                                                   // arithmetic floor for negative exponents
+	frac := uint64(exponent - shifts*65536)
+	fractional := (195766423245049*frac + 971821376*frac*frac + 5127*frac*frac*frac + (1 << 47)) >> 48
+	factor := uint64(65536) + fractional
+	numerator := new(big.Int).Mul(parent.Difficulty, new(big.Int).SetUint64(factor))
+	denominator := new(big.Int).Lsh(big.NewInt(1), 16)
+	if shifts < 0 {
+		denominator.Lsh(denominator, uint(-shifts))
+	} else {
+		numerator.Lsh(numerator, uint(shifts))
+	}
+	numerator.Add(numerator, new(big.Int).Rsh(new(big.Int).Set(denominator), 1))
+	diff := numerator.Div(numerator, denominator)
+	if diff.Cmp(parent.Difficulty) == 0 {
+		if actual*1000 < c.RegistryTargetBlockTimeMillis {
+			diff.Add(diff, big.NewInt(1))
+		} else if actual*1000 > c.RegistryTargetBlockTimeMillis {
 			diff.Sub(diff, big.NewInt(1))
 		}
 	}

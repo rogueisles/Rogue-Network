@@ -1,340 +1,146 @@
-# Rogue Network (RGN) node source
+# Rogue Network node — v4.1.0
 
-This source extends the existing OGG mainnet with the proposed FORGE activation
-at block **1,100,100**. The original mainnet genesis, chain ID **70088**, account
-state and historical rules are preserved. OGG native units become RGN one for one.
+RGN is an EVM-compatible blockchain secured by FORGE Scrypt merged mining.
+This release schedules **FORGE V5 at block 1,121,800**. Existing V4 rules remain
+in force below that height. The original genesis, chain ID **70088**, balances,
+transactions, staking and per-block reward allocations remain unchanged.
 
-The new profile provides Scrypt work anchored to DigiByte and/or Dogecoin,
-the approved 10.7 billion issuance ceiling, a declining 1,100 RGN starting subsidy,
-the 40/30/20/10 mining/staking/P2E/treasury split and the scheduled treasury credits.
-Existing staking and Tribe contract state is preserved; future Tribe funding ends.
+**Every validating node, including exchange-operated nodes, must upgrade before
+activation.** Participating pools and mining-signing services also need the
+matching integration and approved configuration. Updating a pool alone does not
+upgrade other validators. Wallet users keep their existing addresses and keys.
 
-This revision uses profile `rgn-mainnet-v3` and V4 proof certificates. Read
-[RGN-FORK-SPEC.txt](RGN-FORK-SPEC.txt) for the exact rules and
-[RGN-SOURCE-HANDOFF.txt](RGN-SOURCE-HANDOFF.txt) for the snapshot's build/review
-status. Production signer settings and the V4 miner-backed checks remain pending.
-The unchanged genesis file does not silently activate the new profile: every node
-must later receive the same reviewed fork configuration before activation.
+The estimated activation is around **27 October 2026, 13:35 UTC**. Consensus uses
+the block height; the clock estimate changes with actual block production.
 
-For local source checks with Go 1.16.15, run
-`sh build/qualify-rogue-source.sh /absolute/path/to/go`.
-V4 fixtures use synthetic templates and unmined canonical-target headers. Older
-private-difficulty fixtures retain their explicitly bounded scope.
-No Docker build, publication, DNS change or server upgrade is part of this handoff.
+- [FORGE V5 protocol and administration](docs/FORGE-V5-REGISTRY.md)
+- [Release notes](RELEASE-NOTES-4.1.0.md)
+- [Approved public configuration and review](config/MAINNET-V5-RELEASE.md)
+- [Node downloads](https://github.com/rogueisles/Rogue-Node/releases/tag/v4.1.0)
+- [Docker image](https://hub.docker.com/r/roguenetwork/rogue-network)
+- [Pool integration](https://github.com/rogueisles/Mining-Pool)
+- [Atlas documentation](https://rogueisles.com/atlas/)
 
-The original upstream documentation follows for attribution and historical reference.
-Its network and deployment examples are not the new mainnet deployment settings.
+## What changes at activation
 
----
+V5 permits any nonempty authorized subset of **DigiByte, Dogecoin and SOQ**.
+SOQ is optional; pools can continue using DGB/DOGE. An unavailable optional source
+can be omitted while another eligible core source and the mining work quorum
+remain healthy. If all core sources, the work quorum or effective hashpower are
+unavailable, mining can pause until those services recover.
 
-## Go EGEM (upstream reference)
+A bounded registry supports later compatible Scrypt/AuxPoW coins and delayed
+native treasury changes. A separate **3-of-4 administrator quorum** approves
+registry operations; routine online mining signers do not hold this authority.
+All validators derive the effective registry from the canonical RGN chain.
+Local pool settings cannot redirect an approved treasury destination.
 
-Official golang implementation of the EGEM protocol.
+Compatible registrations do not require another RGN validator release when they
+fit the installed proof profile and bounds. Participating pools still need the
+native daemon and integration. New algorithms or verifier changes can require
+another coordinated upgrade. Registering a coin again cannot repair verifier code.
 
-[![API Reference](
-https://camo.githubusercontent.com/915b7be44ada53c290eb157634330494ebe3e30a/68747470733a2f2f676f646f632e6f72672f6769746875622e636f6d2f676f6c616e672f6764646f3f7374617475732e737667
-)](https://godoc.org/github.com/TeamEGEM/go-egem)
-[![Go Report Card](https://goreportcard.com/badge/github.com/TeamEGEM/go-egem)](https://goreportcard.com/report/github.com/TeamEGEM/go-egem)
-[![Travis](https://travis-ci.org/TeamEGEM/go-egem.svg?branch=master)](https://travis-ci.org/TeamEGEM/go-egem)
-[![Gitter](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/TeamEGEM/go-egem?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
+The target becomes **12.5 seconds at H**, configured as `12500` milliseconds.
+Historical headers retain the original 12-second calculation. Reward amounts,
+allocation percentages and issuance heights per block do not change. Calendar
+estimates for fixed block intervals become approximately 4.17% longer at ideal
+spacing. Native rewards remain subject to their own targets and maturity; this
+release does not sell rewards, buy back RGN, burn funds or transfer existing funds.
 
-Automated builds are available for stable releases and the unstable master branch.
-Binary archives are published at https://geth.ethereum.org/downloads/.
+## Upgrading an existing node
 
-## Building the source
+Back up service configuration and wallet custody. Preserve the existing data
+directory. Replace the binary and initialize the **approved scheduled profile**
+using the normal service-controlled upgrade procedure:
 
-For prerequisites and detailed build instructions please read the
-[Installation Instructions](https://github.com/TeamEGEM/go-egem/wiki/Building-Ethereum)
-on the wiki.
-
-Building geth requires both a Go (version 1.10 or later) and a C compiler.
-You can install them using your favourite package manager.
-Once the dependencies are installed, run
-
-    make egem
-
-or, to build the full suite of utilities:
-
-    make all
-
-## Executables
-
-The go-egem project comes with several wrappers/executables found in the `cmd` directory.
-
-| Command    | Description |
-|:----------:|-------------|
-| **`egem`** | Our main EGEM CLI client. It is the entry point into the EGEM network (main-, test- or private net), capable of running as a full node (default) archive node (retaining all historical state) or a light node (retrieving data live). It can be used by other processes as a gateway into the Egem network via JSON RPC endpoints exposed on top of HTTP, WebSocket and/or IPC transports. `geth --help` and the [CLI Wiki page](https://github.com/TeamEGEM/go-egem/wiki/Command-Line-Options) for command line options. |
-| `abigen` | Source code generator to convert Ethereum contract definitions into easy to use, compile-time type-safe Go packages. It operates on plain [Ethereum contract ABIs](https://github.com/ethereum/wiki/wiki/Ethereum-Contract-ABI) with expanded functionality if the contract bytecode is also available. However it also accepts Solidity source files, making development much more streamlined. Please see our [Native DApps](https://github.com/TeamEGEM/go-egem/wiki/Native-DApps:-Go-bindings-to-Ethereum-contracts) wiki page for details. |
-| `bootnode` | Stripped down version of our Ethereum client implementation that only takes part in the network node discovery protocol, but does not run any of the higher level application protocols. It can be used as a lightweight bootstrap node to aid in finding peers in private networks. |
-| `evm` | Developer utility version of the EVM (Ethereum Virtual Machine) that is capable of running bytecode snippets within a configurable environment and execution mode. Its purpose is to allow isolated, fine-grained debugging of EVM opcodes (e.g. `evm --code 60ff60ff --debug`). |
-| `gethrpctest` | Developer utility tool to support our [ethereum/rpc-test](https://github.com/ethereum/rpc-tests) test suite which validates baseline conformity to the [Ethereum JSON RPC](https://github.com/ethereum/wiki/wiki/JSON-RPC) specs. Please see the [test suite's readme](https://github.com/ethereum/rpc-tests/blob/master/README.md) for details. |
-| `rlpdump` | Developer utility tool to convert binary RLP ([Recursive Length Prefix](https://github.com/ethereum/wiki/wiki/RLP)) dumps (data encoding used by the Ethereum protocol both network as well as consensus wise) to user friendlier hierarchical representation (e.g. `rlpdump --hex CE0183FFFFFFC4C304050583616263`). |
-| `swarm`    | swarm daemon and tools. This is the entrypoint for the swarm network. `swarm --help` for command line options and subcommands. See https://swarm-guide.readthedocs.io for swarm documentation. |
-| `puppeth`    | a CLI wizard that aids in creating a new Ethereum network. |
-
-## Running geth
-
-Going through all the possible command line flags is out of scope here (please consult our
-[CLI Wiki page](https://github.com/TeamEGEM/go-egem/wiki/Command-Line-Options)), but we've
-enumerated a few common parameter combos to get you up to speed quickly on how you can run your
-own Geth instance.
-
-### Full node on the main Ethereum network
-
-By far the most common scenario is people wanting to simply interact with the Ethereum network:
-create accounts; transfer funds; deploy and interact with contracts. For this particular use-case
-the user doesn't care about years-old historical data, so we can fast-sync quickly to the current
-state of the network. To do so:
-
-```
-$ egem console
+```sh
+./rgn-node-linux-amd64 --datadir /YOUR/EXISTING/RGN/DATA --nousb init \
+  config/RGN-mainnet-v4.1.0-H1121800.json
 ```
 
-This command will:
+Do not start a second process on the same database. Preserve peer/network and
+protected RPC settings. Start the upgraded service, confirm the unchanged genesis
+and a canonical head matching healthy peers, and compare its loaded configuration
+against the approved review. The new public profile SHA256 is:
 
- * Start geth in fast sync mode (default, can be changed with the `--syncmode` flag), causing it to
-   download more data in exchange for avoiding processing the entire history of the Ethereum network,
-   which is very CPU intensive.
- * Start up Geth's built-in interactive [JavaScript console](https://github.com/TeamEGEM/go-egem/wiki/JavaScript-Console),
-   (via the trailing `console` subcommand) through which you can invoke all official [`web3` methods](https://github.com/ethereum/wiki/wiki/JavaScript-API)
-   as well as Geth's own [management APIs](https://github.com/TeamEGEM/go-egem/wiki/Management-APIs).
-   This too is optional and if you leave it out you can always attach to an already running Geth instance
-   with `egem attach`.
-
-### Full node on the Ethereum test network
-
-Transitioning towards developers, if you'd like to play around with creating Ethereum contracts, you
-almost certainly would like to do that without any real money involved until you get the hang of the
-entire system. In other words, instead of attaching to the main network, you want to join the **test**
-network with your node, which is fully equivalent to the main network, but with play-Ether only.
-
-```
-$ egem --testnet console
+```text
+87c66819311b112adce09855f9c2c38490fb32a193ea35ca7c466892319aefd8
 ```
 
-The `console` subcommand have the exact same meaning as above and they are equally useful on the
-testnet too. Please see above for their explanations if you've skipped to here.
+The historical `config/RGN-mainnet-current-SOQ-unscheduled.json` and root
+`genesis.json` are retained for reference and tests. They are **not** the profile
+to initialize for this release. Starting an old unscheduled profile before H can
+remove a future schedule; enforce the approved checksum throughout rollout.
+At/after H, conflicting active settings fail without automatic rewinding.
 
-Specifying the `--testnet` flag however will reconfigure your Geth instance a bit:
+Container users must use the matching scheduled-profile image and documented
+persistent volume. Updating files under the previous image does not update its
+payload checksum. Node binaries/images do not start a complete solo miner.
 
- * Instead of using the default data directory (`~/.ethereum` on Linux for example), Geth will nest
-   itself one level deeper into a `testnet` subfolder (`~/.ethereum/testnet` on Linux). Note, on OSX
-   and Linux this also means that attaching to a running testnet node requires the use of a custom
-   endpoint since `geth attach` will try to attach to a production node endpoint by default. E.g.
-   `geth attach <datadir>/testnet/geth.ipc`. Windows users are not affected by this.
- * Instead of connecting the main Ethereum network, the client will connect to the test network,
-   which uses different P2P bootnodes, different network IDs and genesis states.
-   
-*Note: Although there are some internal protective measures to prevent transactions from crossing
-over between the main network and test network, you should make sure to always use separate accounts
-for play-money and real-money. Unless you manually move accounts, Geth will by default correctly
-separate the two networks and will not make any accounts available between them.*
+## Build from source
 
-### Full node on the Rinkeby test network
+Use the pinned legacy toolchain **Go 1.16.15**, GCC and libc development headers.
+Dependencies are vendored; inherited module/import names are intentional.
+Build on Ubuntu 22.04 when targeting Ubuntu 22.04 and newer.
 
-The above test network is a cross client one based on the ethash proof-of-work consensus algorithm. As such, it has certain extra overhead and is more susceptible to reorganization attacks due to the network's low difficulty / security. Go Ethereum also supports connecting to a proof-of-authority based test network called [*Rinkeby*](https://www.rinkeby.io) (operated by members of the community). This network is lighter, more secure, but is only supported by go-ethereum.
-
-```
-$ geth --rinkeby console
-```
-
-### Configuration
-
-As an alternative to passing the numerous flags to the `geth` binary, you can also pass a configuration file via:
-
-```
-$ geth --config /path/to/your_config.toml
+```sh
+export GO111MODULE=off CGO_ENABLED=1 GOMAXPROCS=2
+export CGO_CFLAGS='-O2 -g0' CGO_CXXFLAGS='-O2 -g0'
+mkdir -p build/bin
+bash build/env.sh /absolute/path/to/go1.16.15/bin/go build \
+  -trimpath -ldflags='-buildid= -X main.gitCommit=rgn400v5' \
+  -o build/bin/rgn-node-linux-amd64 ./cmd/egem
 ```
 
-To get an idea how the file should look like you can use the `dumpconfig` subcommand to export your existing configuration:
+For byte-identical Linux artifact reproduction, use the source-build Dockerfile
+and its pinned Ubuntu/Go inputs. It builds from the canonical **`/node`** source
+path to **`/release/egem`**. Qualification reproduced the same binary in a native
+Ubuntu 22.04 build using a fresh isolated Go cache. Go 1.16 CGO cache entries can
+retain source-path metadata after moving a tree; do not reuse a cache populated
+from a different checkout path when comparing binary checksums. The general
+command above builds the client; exact release reproduction also requires the
+recorded build paths, compiler environment and fresh-cache procedure.
 
-```
-$ geth --your-favourite-flags dumpconfig
-```
+Package version is **4.1.0** and the release identifier is `rgn400v5`. The inherited
+engine's internal version/banner is retained for compatibility; release manifests
+bind the exact source and binary checksums.
 
-*Note: This works only with geth v1.6.0 and above.*
+## Verification and resource bounds
 
-#### Docker quick start
+The registry is limited to **16 coin slots, six native sources per job, five
+administrator keys, one rate-limited operation per block and 16 KiB for the entire
+proof**. Administrator changes require at least 720 blocks' notice and 64 blocks
+between operations. Ordinary validators check proofs and registry commitments;
+they do not run every native full node.
 
-One of the quickest ways to get Ethereum up and running on your machine is by using Docker:
+Qualification includes private Scrypt mining, all seven core-source subsets,
+canonical native regtest rewards, transfers, cross-server peers, fresh sync,
+restart and outage recovery, treasury/admin rotations, compatible extra-coin
+registration, durable accounting, vectors and race tests. Native mainnet proposal
+checks accepted valid DGB/DOGE/SOQ bodies and rejected overclaims; they do not
+establish a mined mainnet SOQ reward.
 
-```
-docker run -d --name ethereum-node -v /Users/alice/ethereum:/root \
-           -p 8545:8545 -p 30303:30303 \
-           ethereum/client-go
-```
+A maximum-capacity 10,000-header validation test retained approximately 1.34–1.38 MB
+of Go heap after GC with a fixed 256-header reader window. This measures validation
+retention, not full chain/database size or every deployment. Full verification
+benchmarks measured approximately 0.5 ms for ordinary V5 fixtures and 1.68 ms for a
+maximum administrator rotation on one development machine. See the qualification
+report for artifact identities, allocations, private-difficulty/regtest adapters
+and networking limits. No software can guarantee external chain availability.
 
-This will start geth in fast-sync mode with a DB memory allowance of 1GB just as the above command does.  It will also create a persistent volume in your home directory for saving your blockchain as well as map the default ports. There is also an `alpine` tag available for a slim version of the image.
+Historical consensus/reward vectors and the optimized SHA3 boundary repair are
+covered by regression tests. The SHA3 repair preserves hash outputs and passes
+upstream known vectors, portable equivalence and default race/checkptr stress.
 
-Do not forget `--rpcaddr 0.0.0.0`, if you want to access RPC from other containers and/or hosts. By default, `geth` binds to the local interface and RPC endpoints is not accessible from the outside.
+Before H, a coordinated withdrawal can return the network to a coherent V4
+configuration. Once V5 blocks exist, retain V5 validation and repair or omit an
+optional source; reverting validators to V4 is unsafe.
 
-### Programatically interfacing Geth nodes
+## Source and license
 
-As a developer, sooner rather than later you'll want to start interacting with Geth and the Ethereum
-network via your own programs and not manually through the console. To aid this, Geth has built in
-support for a JSON-RPC based APIs ([standard APIs](https://github.com/ethereum/wiki/wiki/JSON-RPC) and
-[Geth specific APIs](https://github.com/TeamEGEM/go-egem/wiki/Management-APIs)). These can be
-exposed via HTTP, WebSockets and IPC (unix sockets on unix based platforms, and named pipes on Windows).
+See `RELEASE-SOURCE.json` and the release build manifest for source provenance.
+EGEM/go-ethereum attribution and GPL/LGPL notices are preserved in `AUTHORS`,
+`COPYING`, `COPYING.LESSER` and source headers. Historical documentation remains
+under `docs/history/`; earlier optional-SOQ proposals do not configure this release.
 
-The IPC interface is enabled by default and exposes all the APIs supported by Geth, whereas the HTTP
-and WS interfaces need to manually be enabled and only expose a subset of APIs due to security reasons.
-These can be turned on/off and configured as you'd expect.
-
-HTTP based JSON-RPC API options:
-
-  * `--rpc` Enable the HTTP-RPC server
-  * `--rpcaddr` HTTP-RPC server listening interface (default: "localhost")
-  * `--rpcport` HTTP-RPC server listening port (default: 8545)
-  * `--rpcapi` API's offered over the HTTP-RPC interface (default: "eth,net,web3")
-  * `--rpccorsdomain` Comma separated list of domains from which to accept cross origin requests (browser enforced)
-  * `--ws` Enable the WS-RPC server
-  * `--wsaddr` WS-RPC server listening interface (default: "localhost")
-  * `--wsport` WS-RPC server listening port (default: 8546)
-  * `--wsapi` API's offered over the WS-RPC interface (default: "eth,net,web3")
-  * `--wsorigins` Origins from which to accept websockets requests
-  * `--ipcdisable` Disable the IPC-RPC server
-  * `--ipcapi` API's offered over the IPC-RPC interface (default: "admin,debug,eth,miner,net,personal,shh,txpool,web3")
-  * `--ipcpath` Filename for IPC socket/pipe within the datadir (explicit paths escape it)
-
-You'll need to use your own programming environments' capabilities (libraries, tools, etc) to connect
-via HTTP, WS or IPC to a Geth node configured with the above flags and you'll need to speak [JSON-RPC](http://www.jsonrpc.org/specification)
-on all transports. You can reuse the same connection for multiple requests!
-
-**Note: Please understand the security implications of opening up an HTTP/WS based transport before
-doing so! Hackers on the internet are actively trying to subvert Ethereum nodes with exposed APIs!
-Further, all browser tabs can access locally running webservers, so malicious webpages could try to
-subvert locally available APIs!**
-
-### Operating a private network
-
-Maintaining your own private network is more involved as a lot of configurations taken for granted in
-the official networks need to be manually set up.
-
-#### Defining the private genesis state
-
-First, you'll need to create the genesis state of your networks, which all nodes need to be aware of
-and agree upon. This consists of a small JSON file (e.g. call it `genesis.json`):
-
-```json
-{
-  "config": {
-        "chainId": 0,
-        "homesteadBlock": 0,
-        "eip155Block": 0,
-        "eip158Block": 0
-    },
-  "alloc"      : {},
-  "coinbase"   : "0x0000000000000000000000000000000000000000",
-  "difficulty" : "0x20000",
-  "extraData"  : "",
-  "gasLimit"   : "0x2fefd8",
-  "nonce"      : "0x0000000000000042",
-  "mixhash"    : "0x0000000000000000000000000000000000000000000000000000000000000000",
-  "parentHash" : "0x0000000000000000000000000000000000000000000000000000000000000000",
-  "timestamp"  : "0x00"
-}
-```
-
-The above fields should be fine for most purposes, although we'd recommend changing the `nonce` to
-some random value so you prevent unknown remote nodes from being able to connect to you. If you'd
-like to pre-fund some accounts for easier testing, you can populate the `alloc` field with account
-configs:
-
-```json
-"alloc": {
-  "0x0000000000000000000000000000000000000001": {"balance": "111111111"},
-  "0x0000000000000000000000000000000000000002": {"balance": "222222222"}
-}
-```
-
-With the genesis state defined in the above JSON file, you'll need to initialize **every** Geth node
-with it prior to starting it up to ensure all blockchain parameters are correctly set:
-
-```
-$ geth init path/to/genesis.json
-```
-
-#### Creating the rendezvous point
-
-With all nodes that you want to run initialized to the desired genesis state, you'll need to start a
-bootstrap node that others can use to find each other in your network and/or over the internet. The
-clean way is to configure and run a dedicated bootnode:
-
-```
-$ bootnode --genkey=boot.key
-$ bootnode --nodekey=boot.key
-```
-
-With the bootnode online, it will display an [`enode` URL](https://github.com/ethereum/wiki/wiki/enode-url-format)
-that other nodes can use to connect to it and exchange peer information. Make sure to replace the
-displayed IP address information (most probably `[::]`) with your externally accessible IP to get the
-actual `enode` URL.
-
-*Note: You could also use a full fledged Geth node as a bootnode, but it's the less recommended way.*
-
-#### Starting up your member nodes
-
-With the bootnode operational and externally reachable (you can try `telnet <ip> <port>` to ensure
-it's indeed reachable), start every subsequent Geth node pointed to the bootnode for peer discovery
-via the `--bootnodes` flag. It will probably also be desirable to keep the data directory of your
-private network separated, so do also specify a custom `--datadir` flag.
-
-```
-$ geth --datadir=path/to/custom/data/folder --bootnodes=<bootnode-enode-url-from-above>
-```
-
-*Note: Since your network will be completely cut off from the main and test networks, you'll also
-need to configure a miner to process transactions and create new blocks for you.*
-
-#### Running a private miner
-
-Mining on the public Ethereum network is a complex task as it's only feasible using GPUs, requiring
-an OpenCL or CUDA enabled `ethminer` instance. For information on such a setup, please consult the
-[EtherMining subreddit](https://www.reddit.com/r/EtherMining/) and the [Genoil miner](https://github.com/Genoil/cpp-ethereum)
-repository.
-
-In a private network setting however, a single CPU miner instance is more than enough for practical
-purposes as it can produce a stable stream of blocks at the correct intervals without needing heavy
-resources (consider running on a single thread, no need for multiple ones either). To start a Geth
-instance for mining, run it with all your usual flags, extended by:
-
-```
-$ geth <usual-flags> --mine --minerthreads=1 --etherbase=0x0000000000000000000000000000000000000000
-```
-
-Which will start mining blocks and transactions on a single CPU thread, crediting all proceedings to
-the account specified by `--etherbase`. You can further tune the mining by changing the default gas
-limit blocks converge to (`--targetgaslimit`) and the price transactions are accepted at (`--gasprice`).
-
-## Contribution
-
-Thank you for considering to help out with the source code! We welcome contributions from
-anyone on the internet, and are grateful for even the smallest of fixes!
-
-If you'd like to contribute to go-ethereum, please fork, fix, commit and send a pull request
-for the maintainers to review and merge into the main code base. If you wish to submit more
-complex changes though, please check up with the core devs first on [our gitter channel](https://gitter.im/TeamEGEM/go-egem)
-to ensure those changes are in line with the general philosophy of the project and/or get some
-early feedback which can make both your efforts much lighter as well as our review and merge
-procedures quick and simple.
-
-Please make sure your contributions adhere to our coding guidelines:
-
- * Code must adhere to the official Go [formatting](https://golang.org/doc/effective_go.html#formatting) guidelines (i.e. uses [gofmt](https://golang.org/cmd/gofmt/)).
- * Code must be documented adhering to the official Go [commentary](https://golang.org/doc/effective_go.html#commentary) guidelines.
- * Pull requests need to be based on and opened against the `master` branch.
- * Commit messages should be prefixed with the package(s) they modify.
-   * E.g. "eth, rpc: make trace configs optional"
-
-Please see the [Developers' Guide](https://github.com/TeamEGEM/go-egem/wiki/Developers'-Guide)
-for more details on configuring your environment, managing project dependencies and testing procedures.
-
-## License
-
-The go-ethereum library (i.e. all code outside of the `cmd` directory) is licensed under the
-[GNU Lesser General Public License v3.0](https://www.gnu.org/licenses/lgpl-3.0.en.html), also
-included in our repository in the `COPYING.LESSER` file.
-
-The go-ethereum binaries (i.e. all code inside of the `cmd` directory) is licensed under the
-[GNU General Public License v3.0](https://www.gnu.org/licenses/gpl-3.0.en.html), also included
-in our repository in the `COPYING` file.
+The 4.1.0 packaging retains the tested node's internal build identifier `rgn400v5`. This identifier is opaque; the release version, scheduled profile and published checksums identify this package.

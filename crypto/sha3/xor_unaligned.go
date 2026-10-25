@@ -10,9 +10,12 @@ package sha3
 import "unsafe"
 
 func xorInUnaligned(d *state, buf []byte) {
-	bw := (*[maxRate / 8]uint64)(unsafe.Pointer(&buf[0]))
 	n := len(buf)
+	// Each cast must fit the available input. A maximum-rate array cast over
+	// a shorter rate's final backing allocation violates pointer bounds even
+	// when the unrolled reads themselves use only the shorter rate.
 	if n >= 72 {
+		bw := (*[9]uint64)(unsafe.Pointer(&buf[0]))
 		d.a[0] ^= bw[0]
 		d.a[1] ^= bw[1]
 		d.a[2] ^= bw[2]
@@ -24,21 +27,25 @@ func xorInUnaligned(d *state, buf []byte) {
 		d.a[8] ^= bw[8]
 	}
 	if n >= 104 {
+		bw := (*[13]uint64)(unsafe.Pointer(&buf[0]))
 		d.a[9] ^= bw[9]
 		d.a[10] ^= bw[10]
 		d.a[11] ^= bw[11]
 		d.a[12] ^= bw[12]
 	}
 	if n >= 136 {
+		bw := (*[17]uint64)(unsafe.Pointer(&buf[0]))
 		d.a[13] ^= bw[13]
 		d.a[14] ^= bw[14]
 		d.a[15] ^= bw[15]
 		d.a[16] ^= bw[16]
 	}
 	if n >= 144 {
+		bw := (*[18]uint64)(unsafe.Pointer(&buf[0]))
 		d.a[17] ^= bw[17]
 	}
 	if n >= 168 {
+		bw := (*[21]uint64)(unsafe.Pointer(&buf[0]))
 		d.a[18] ^= bw[18]
 		d.a[19] ^= bw[19]
 		d.a[20] ^= bw[20]

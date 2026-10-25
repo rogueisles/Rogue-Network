@@ -27,6 +27,7 @@ import (
 
 	"github.com/TeamEGEM/go-egem/common"
 	"github.com/TeamEGEM/go-egem/common/hexutil"
+	"github.com/TeamEGEM/go-egem/consensus/forge"
 	"github.com/TeamEGEM/go-egem/consensus/oggreward"
 	"github.com/TeamEGEM/go-egem/core"
 	"github.com/TeamEGEM/go-egem/core/state"
@@ -112,17 +113,20 @@ func (api *PublicMinerAPI) GetWork() ([4]string, error) {
 // AuxBlockWork is the FORGE Scrypt merged-mining job returned by
 // eth_createAuxBlock. All integer quantities are JSON-RPC hex values.
 type AuxBlockWork struct {
-	ProofVersion        hexutil.Uint64 `json:"proofVersion"`
-	WorkHash            common.Hash    `json:"workHash"`
-	Target              common.Hash    `json:"target"`
-	Height              hexutil.Uint64 `json:"height"`
-	Timestamp           hexutil.Uint64 `json:"timestamp"`
-	TemplateMaxValidity hexutil.Uint64 `json:"templateMaxValidity"`
-	AuxChainID          hexutil.Uint64 `json:"auxChainId"`
-	DogeAuxChainID      hexutil.Uint64 `json:"dogeAuxChainId"`
-	PreviousBlockHash   common.Hash    `json:"previousBlockHash"`
-	Difficulty          *hexutil.Big   `json:"difficulty"`
-	MinerReward         *hexutil.Big   `json:"minerReward"`
+	TargetBlockTimeMillis hexutil.Uint64 `json:"targetBlockTimeMillis"`
+	HeaderRLP             hexutil.Bytes  `json:"headerRlp,omitempty"`
+	OptionalSOQ           bool           `json:"optionalSoq"`
+	ProofVersion          hexutil.Uint64 `json:"proofVersion"`
+	WorkHash              common.Hash    `json:"workHash"`
+	Target                common.Hash    `json:"target"`
+	Height                hexutil.Uint64 `json:"height"`
+	Timestamp             hexutil.Uint64 `json:"timestamp"`
+	TemplateMaxValidity   hexutil.Uint64 `json:"templateMaxValidity"`
+	AuxChainID            hexutil.Uint64 `json:"auxChainId"`
+	DogeAuxChainID        hexutil.Uint64 `json:"dogeAuxChainId"`
+	PreviousBlockHash     common.Hash    `json:"previousBlockHash"`
+	Difficulty            *hexutil.Big   `json:"difficulty"`
+	MinerReward           *hexutil.Big   `json:"minerReward"`
 }
 
 // OGGBlockReward retains the public response type used by explorer clients.
@@ -167,18 +171,24 @@ func formatAuxBlockWork(work *miner.AuxWork, cfg *params.ChainConfig) *AuxBlockW
 	if cfg.IsRogue(new(big.Int).SetUint64(work.Height)) {
 		version = 4
 	}
+	if cfg.IsForgeRegistry(new(big.Int).SetUint64(work.Height)) {
+		version = 5
+	}
 	return &AuxBlockWork{
-		ProofVersion:        hexutil.Uint64(version),
-		WorkHash:            work.Hash,
-		Target:              common.BytesToHash(work.Target.Bytes()),
-		Height:              hexutil.Uint64(work.Height),
-		Timestamp:           hexutil.Uint64(work.Timestamp),
-		TemplateMaxValidity: hexutil.Uint64(cfg.Forge.TemplateMaxValidity),
-		AuxChainID:          hexutil.Uint64(cfg.Forge.AuxChainID),
-		DogeAuxChainID:      hexutil.Uint64(cfg.Forge.DogeAuxChainID),
-		PreviousBlockHash:   work.PreviousBlockHash,
-		Difficulty:          hexBigCopy(work.Difficulty),
-		MinerReward:         hexBigCopy(reward.Miner),
+		TargetBlockTimeMillis: hexutil.Uint64(forge.RegistryTargetMillis(cfg, new(big.Int).SetUint64(work.Height))),
+		ProofVersion:          hexutil.Uint64(version),
+		HeaderRLP:             work.HeaderRLP,
+		OptionalSOQ:           cfg.IsOptionalSOQ(new(big.Int).SetUint64(work.Height)),
+		WorkHash:              work.Hash,
+		Target:                common.BytesToHash(work.Target.Bytes()),
+		Height:                hexutil.Uint64(work.Height),
+		Timestamp:             hexutil.Uint64(work.Timestamp),
+		TemplateMaxValidity:   hexutil.Uint64(cfg.Forge.TemplateMaxValidity),
+		AuxChainID:            hexutil.Uint64(cfg.Forge.AuxChainID),
+		DogeAuxChainID:        hexutil.Uint64(cfg.Forge.DogeAuxChainID),
+		PreviousBlockHash:     work.PreviousBlockHash,
+		Difficulty:            hexBigCopy(work.Difficulty),
+		MinerReward:           hexBigCopy(reward.Miner),
 	}
 }
 
@@ -207,6 +217,7 @@ func canonicalBlockReward(config *params.ChainConfig, height uint64) *OGGBlockRe
 		specialAddress = &address
 	}
 	return &OGGBlockReward{
+		TargetBlockTimeMillis:  hexutil.Uint64(forge.RegistryTargetMillis(config, number)),
 		BlockNumber:            hexutil.Uint64(height),
 		Total:                  hexBigCopy(reward.Total),
 		Miner:                  hexBigCopy(reward.Miner),

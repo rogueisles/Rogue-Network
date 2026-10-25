@@ -1,0 +1,18 @@
+{
+  "snapshotDate": "2026-10-20",
+  "component": "node",
+  "profile": "rgn-mainnet-v3",
+  "proofProtocol": 4,
+  "sourceReviewAndIsolatedBuildsAllowed": true,
+  "liveUpgradeReady": false,
+  "productionConfigurationIncluded": false,
+  "dockerImagesIncluded": false,
+  "existingChainDataIncludedOrReset": false,
+  "compiledInputCountVerified": 1735,
+  "remainingGates": [
+    "Successful canonical-target V4 block sealing/import across activation with real miner and owned native proposal validation. Earlier V3 miner rehearsal does not prove V4.",
+    "Permanent production signer identities/services, independent native data access and common quorum/difficulty/validity settings remain unfrozen.",
+    "Confirm the active explorer route and integrate height-aware RPC rewards, indexing, supply/APR and frontend labels before website rollout.",
+    "Refresh backups, four-node head/configuration/build agreement and activation-height lead before coordinated upgrades."
+  ]
+}

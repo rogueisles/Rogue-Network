@@ -4,6 +4,7 @@
 package forge
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"math/big"
@@ -38,6 +39,9 @@ func New(config *params.ChainConfig) (*Forge, error) {
 	if config.Forge.AllowAuxTree && !config.ValidateRogueSchedule() && (config.ChainId == nil || (config.ChainId.Cmp(big.NewInt(7008914)) != 0 && !(config.ChainId.Cmp(big.NewInt(7008902)) == 0 && config.Forge.PrivateCPUTest)) || config.ForgeBlock.Cmp(big.NewInt(1)) != 0) {
 		return nil, errors.New("expanded auxiliary tree is isolated to D14 or private CPU lab")
 	}
+	if err := validateRegistryConfig(config); err != nil {
+		return nil, err
+	}
 	return &Forge{config: config}, nil
 }
 
@@ -65,14 +69,11 @@ func (f *Forge) VerifyHeaders(chain consensus.ChainReader, headers []*types.Head
 	abort := make(chan struct{})
 	results := make(chan error, len(headers))
 	go func() {
+		overlay := newBatchChain(chain)
 		for i, header := range headers {
 			var parent *types.Header
-			if i == 0 {
-				if header.Number != nil && header.Number.Sign() > 0 {
-					parent = chain.GetHeader(header.ParentHash, header.Number.Uint64()-1)
-				}
-			} else {
-				parent = headers[i-1]
+			if header != nil && header.Number != nil && header.Number.IsUint64() && header.Number.Sign() > 0 {
+				parent = overlay.GetHeader(header.ParentHash, header.Number.Uint64()-1)
 			}
 			var err error
 			if parent == nil {
@@ -81,7 +82,10 @@ func (f *Forge) VerifyHeaders(chain consensus.ChainReader, headers []*types.Head
 				err = errors.New("FORGE engine cannot verify pre-fork header")
 			} else {
 				seal := i < len(seals) && seals[i]
-				err = f.verifyHeader(chain, header, parent, seal)
+				err = f.verifyHeader(overlay, header, parent, seal)
+			}
+			if err == nil {
+				overlay.add(header)
 			}
 			select {
 			case <-abort:
@@ -138,6 +142,18 @@ func (f *Forge) verifyHeader(chain consensus.ChainReader, header, parent *types.
 	} else if err != nil && err != ErrNoProof {
 		return err
 	}
+	if f.config.IsForgeRegistry(header.Number) {
+		if err := f.verifyFlexible(chain, header, false); err != nil {
+			return err
+		}
+		if seal {
+			return f.verifyFlexiblePow(header)
+		}
+		return nil
+	}
+	if len(header.Extra) > 4 && bytes.Equal(header.Extra[:4], proofMagic) && header.Extra[4] == 5 {
+		return errors.New("V5 registry proof before activation")
+	}
 	if seal {
 		return f.VerifySeal(chain, header)
 	}
@@ -155,6 +171,13 @@ func (f *Forge) VerifyUncles(chain consensus.ChainReader, block *types.Block) er
 }
 
 func (f *Forge) VerifySeal(chain consensus.ChainReader, header *types.Header) error {
+	if f.config.IsForgeRegistry(header.Number) {
+		return f.verifyFlexible(chain, header, true)
+	}
+	if len(header.Extra) > 4 && bytes.Equal(header.Extra[:4], proofMagic) && header.Extra[4] == 5 {
+		return errors.New("V5 registry proof before activation")
+	}
+
 	p, err := DecodeProof(header.Extra)
 	if err == ErrNoProof {
 		return errors.New("missing FORGE AuxPoW proof")

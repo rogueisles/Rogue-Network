@@ -8,6 +8,7 @@ import (
 // OGGBlockReward reports subsidy allocations, recipients and separate special
 // issuance. Reward-suffixed fields preserve the explorer response contract.
 type OGGBlockReward struct {
+	TargetBlockTimeMillis  hexutil.Uint64  `json:"targetBlockTimeMillis"`
 	BlockNumber            hexutil.Uint64  `json:"blockNumber"`
 	Total                  *hexutil.Big    `json:"total"`
 	Miner                  *hexutil.Big    `json:"miner"`

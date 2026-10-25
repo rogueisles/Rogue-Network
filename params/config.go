@@ -21,6 +21,7 @@ import (
 	"math/big"
 
 	"github.com/TeamEGEM/go-egem/common"
+	"github.com/TeamEGEM/go-egem/common/hexutil"
 )
 
 var (
@@ -200,6 +201,19 @@ func (c *ProgPoWConfig) String() string { return "progpow" }
 // ChainConfig.ForgeBlock so a binary can contain FORGE support while keeping it
 // disabled until an explicit activation height is configured.
 type ForgeConfig struct {
+	// RegistryBlock enables V5 only at an explicitly coordinated future height.
+	// A nil block leaves all historical and current mainnet rules unchanged.
+	RegistryBlock                 *big.Int      `json:"registryBlock,omitempty"`
+	RegistryBootstrap             hexutil.Bytes `json:"registryBootstrap,omitempty"`
+	RegistryMinDelay              uint64        `json:"registryMinDelay,omitempty"`
+	RegistryTargetBlockTimeMillis uint64        `json:"registryTargetBlockTimeMillis,omitempty"`
+	RegistryMinOperationInterval  uint64        `json:"registryMinOperationInterval,omitempty"`
+
+	// OptionalSOQBlock permits SOQ as an optional auxiliary leaf at this height.
+	// Nil disables it. The original FORGE rewards, anchors and treasury pins
+	// remain immutable; SOQ payout destinations belong to pool operators.
+	OptionalSOQBlock *big.Int `json:"optionalSoqBlock,omitempty"`
+
 	// RewardSchedule selects an immutable issuance schedule explicitly. An empty
 	// value preserves the existing reward rules and allocation percentages.
 	RewardSchedule            string      `json:"rewardSchedule,omitempty"`
@@ -413,7 +427,38 @@ func (c *ChainConfig) checkCompatible(newcfg *ChainConfig, head *big.Int) *Confi
 	if c.IsForge(head) && !forgeConfigEqual(c.Forge, newcfg.Forge) {
 		return newCompatError("FORGE parameters", c.ForgeBlock, newcfg.ForgeBlock)
 	}
+	var oldSOQ, newSOQ *big.Int
+	if c.Forge != nil {
+		oldSOQ = c.Forge.OptionalSOQBlock
+	}
+	if newcfg.Forge != nil {
+		newSOQ = newcfg.Forge.OptionalSOQBlock
+	}
+	if isForkIncompatible(oldSOQ, newSOQ, head) {
+		return newCompatError("optional SOQ fork block", oldSOQ, newSOQ)
+	}
+	var oldRegistry, newRegistry *big.Int
+	if c.Forge != nil {
+		oldRegistry = c.Forge.RegistryBlock
+	}
+	if newcfg.Forge != nil {
+		newRegistry = newcfg.Forge.RegistryBlock
+	}
+	if isForkIncompatible(oldRegistry, newRegistry, head) {
+		return newCompatError("FORGE registry fork block", oldRegistry, newRegistry)
+	}
+	if (isForked(oldRegistry, head) || isForked(newRegistry, head)) && !registryConfigEqual(c.Forge, newcfg.Forge) {
+		return newCompatError("FORGE registry parameters", oldRegistry, newRegistry)
+	}
 	return nil
+}
+
+func registryConfigEqual(x, y *ForgeConfig) bool {
+	if x == nil || y == nil {
+		return x == y
+	}
+	return string(x.RegistryBootstrap) == string(y.RegistryBootstrap) &&
+		x.RegistryMinDelay == y.RegistryMinDelay && x.RegistryMinOperationInterval == y.RegistryMinOperationInterval && x.RegistryTargetBlockTimeMillis == y.RegistryTargetBlockTimeMillis
 }
 
 func historicalEngineEqual(x, y *ChainConfig) bool {

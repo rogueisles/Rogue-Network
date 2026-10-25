@@ -1,3 +1,9 @@
+HISTORICAL FORGE V4 / 1,100,100 SPECIFICATION
+This document preserves the original economic and protocol specification and
+its qualification notes. Its deployment-status statements describe that earlier
+snapshot. For the current optional-SOQ candidate and unscheduled activation,
+see OPTIONAL-SOQ-UPGRADE.md and the release qualification bundle.
+
 ROGUE NETWORK / RGN -- SOURCE SPECIFICATION, PROFILE V3 / PROOF V4
 
 IDENTITY AND ACTIVATION
@@ -143,3 +149,4 @@ permanent signer services/settings, fresh backups and four-node height/config
 agreement. A separate automated review is not an external security audit.
 The preserved genesis does not schedule the fork by itself. No production signer
 configuration, Docker image, source publication or live upgrade is supplied here.
+

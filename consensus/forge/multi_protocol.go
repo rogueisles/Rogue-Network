@@ -9,7 +9,9 @@ import (
 	"math/big"
 )
 
-const MultiExternalMask uint8 = 31
+const MultiExternalMask uint8 = 63
+const SOQAuxChainID uint32 = 21329
+const ExternalSOQ uint8 = 32
 const MultiDomain = "OGG-FORGE-MULTI-TEMPLATE-V3-WORK"
 const MultiDomainV4 = "RGN-FORGE-MULTI-TEMPLATE-V4-WORK"
 
@@ -58,10 +60,16 @@ func MultiChainBit(id uint32) uint8 {
 		return 8
 	case 16:
 		return 16
+	case SOQAuxChainID:
+		return ExternalSOQ
 	}
 	return 0
 }
 func MultiTemplateValid(t MultiTemplate) error {
+	if t.Version == 5 {
+		return FlexibleTemplateValid(t)
+	}
+
 	if (t.Version != 3 && t.Version != 4) || t.Mask == 0 || t.Mask & ^MultiExternalMask != 0 || t.ValidFrom == 0 || t.Expires <= t.ValidFrom || t.Expires-t.ValidFrom > 300 {
 		return errors.New("invalid multi-chain participation or validity")
 	}
@@ -101,6 +109,9 @@ func MultiDigest(t MultiTemplate, work common.Hash) (common.Hash, error) {
 	if t.Version == 4 {
 		domain = MultiDomainV4
 	}
+	if t.Version == 5 {
+		domain = "RGN-FORGE-MULTI-TEMPLATE-V5-WORK"
+	}
 	payload := struct {
 		Domain   []byte
 		Template MultiTemplate
@@ -120,7 +131,7 @@ func ValidateMultiSignatures(t MultiTemplate, work common.Hash, sigs [][]byte, a
 	if t.ValidFrom != stamp || quorum == 0 || quorum > uint64(len(allowed)) {
 		return errors.New("invalid multi-chain work timestamp or quorum")
 	}
-	strict := t.Version == 4
+	strict := t.Version == 4 || t.Version == 5
 	if strict && (len(allowed) > MaxTemplateSigners || uint64(len(sigs)) != quorum) {
 		return errors.New("invalid bounded multi-chain certificate size")
 	}

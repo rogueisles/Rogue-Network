@@ -10,6 +10,7 @@ import (
 	"github.com/TeamEGEM/go-egem/crypto"
 	"github.com/TeamEGEM/go-egem/params"
 	"github.com/TeamEGEM/go-egem/rlp"
+	"math/big"
 )
 
 func EncodeMultiProof(p *MultiProof) ([]byte, error) {
@@ -105,11 +106,20 @@ func verifyMultiBindings(c *params.ForgeConfig, h *types.Header, p *MultiProof) 
 	if c.RewardSchedule == params.RogueRewardSchedule && t.Version != 4 {
 		return errors.New("activated proof requires a mined V4 certificate")
 	}
-	if c.RewardSchedule == params.RogueRewardSchedule && t.Mask & ^uint8(3) != 0 {
+	allowed := uint8(3)
+	soqActive := c.RewardSchedule == params.RogueRewardSchedule && c.OptionalSOQBlock != nil &&
+		c.OptionalSOQBlock.Cmp(big.NewInt(params.RogueActivationHeight)) > 0 && h.Number != nil && h.Number.Cmp(c.OptionalSOQBlock) >= 0
+	if soqActive {
+		allowed |= ExternalSOQ
+	}
+	if t.Mask&ExternalSOQ != 0 && (!soqActive || t.Version != 4) {
+		return errors.New("optional SOQ is not active at this RGN height")
+	}
+	if c.RewardSchedule == params.RogueRewardSchedule && t.Mask & ^allowed != 0 {
 		return errors.New("RGN mainnet proof contains a disabled external chain")
 	}
-	if c.RequireDGBOrDOGE && !RevenueAnchorPresent(t.Mask) {
-		return errors.New("OGG issuance requires DGB or DOGE shared work")
+	if c.RequireDGBOrDOGE && !RevenueAnchorPresent(t.Mask) && !(soqActive && t.Mask&ExternalSOQ != 0) {
+		return errors.New("RGN issuance requires eligible native shared work")
 	}
 	if len(p.ParentHeader) != 80 || len(p.Aux) != len(t.Aux) || len(p.ParentMerkleBranch) > 20 || len(p.MinerExtra) > 32 {
 		return errors.New("invalid multi proof dimensions")
@@ -212,12 +222,22 @@ func verifyMultiBindings(c *params.ForgeConfig, h *types.Header, p *MultiProof) 
 		if e != nil {
 			return e
 		}
-		required := multiPayout(c, a.ChainID)
-		if required == (common.Hash{}) {
-			return errors.New("unconfigured auxiliary treasury")
-		}
-		if e := verifyPayouts(cb, required); e != nil {
-			return fmt.Errorf("auxiliary %d treasury: %v", a.ChainID, e)
+		if a.ChainID == SOQAuxChainID {
+			// SOQ is optional pool revenue. It is fully included in the signed
+			// native candidate and canonical tree, but has no global wallet pin.
+			// Require a native witness-v1 destination; native proposal validation
+			// by quorum signers establishes the amount and spendable destination.
+			if !soqActive || !validSOQOutputs(cb) {
+				return errors.New("invalid optional SOQ coinbase destination")
+			}
+		} else {
+			required := multiPayout(c, a.ChainID)
+			if required == (common.Hash{}) {
+				return errors.New("unconfigured auxiliary treasury")
+			}
+			if e := verifyPayouts(cb, required); e != nil {
+				return fmt.Errorf("auxiliary %d treasury: %v", a.ChainID, e)
+			}
 		}
 		if e := verifyCoinbaseMerkle(a.Header, cb, a.MerkleBranch, 0); e != nil {
 			return e

@@ -1,9 +1,7 @@
-**/.git
 .git
-!.git/HEAD
-!.git/refs/heads
-**/*_test.go
-
+**/.git
+**/__pycache__
 build/_workspace
-build/_bin
-tests/testdata
+build/bin
+egem
+*.log
